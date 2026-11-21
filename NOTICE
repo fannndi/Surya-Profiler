@@ -1,0 +1,16 @@
+Surya Profiler
+==============
+
+This project is a new MIUI 14 / Android 12 implementation derived from the
+architecture and safety patterns of MiFineTune (local reference only, not
+bundled in this repository):
+
+  MiFineTune — Apache License 2.0
+  Copyright (c) MiFineTune contributors
+
+No MiFineTune trademark or device-specific MIUI 12 assumption is claimed as
+correct for this device. All MIUI 14 behavior was re-audited on the device;
+see `research/`.
+
+The full Apache License 2.0 text is in `LICENSE`; the Rust crate declares the
+same license in `core/Cargo.toml`.

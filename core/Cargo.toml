@@ -1,0 +1,27 @@
+[package]
+name = "surya-profiler-core"
+version = "0.6.0"
+edition = "2021"
+description = "MIUI 14-harmonized performance profiler core (POCO X3 NFC / surya, Android 12)"
+license = "Apache-2.0"
+
+[lib]
+name = "surya_profiler_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "surya-prof"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

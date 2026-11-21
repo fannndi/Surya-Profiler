@@ -1,0 +1,184 @@
+//! CPU / core_ctl catalog entries.
+
+use crate::engine::catalog::{Entry, Kind, Tier};
+
+pub(crate) fn entries() -> Vec<Entry> {
+    use Kind::*;
+    use Tier::*;
+    vec![
+        // --- policy0 (Silver cpu0-5) ---
+        e!(
+            "policy0.scaling_governor",
+            "/sys/devices/system/cpu/cpufreq/policy0/scaling_governor",
+            Baseline,
+            Gov,
+            "policy0"
+        ),
+        e!(
+            "policy0.scaling_min_freq",
+            "/sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq",
+            Baseline,
+            FreqMin,
+            "policy0"
+        ),
+        e!(
+            "policy0.scaling_max_freq",
+            "/sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq",
+            Baseline,
+            FreqMax,
+            "policy0"
+        ),
+        e!(
+            "policy0.schedutil.hispeed_freq",
+            "/sys/devices/system/cpu/cpufreq/policy0/schedutil/hispeed_freq",
+            Baseline,
+            Freq,
+            "policy0"
+        ),
+        e!(
+            "policy0.schedutil.hispeed_load",
+            "/sys/devices/system/cpu/cpufreq/policy0/schedutil/hispeed_load",
+            Baseline,
+            Int,
+            ""
+        ),
+        e!(
+            "policy0.schedutil.up_rate_limit_us",
+            "/sys/devices/system/cpu/cpufreq/policy0/schedutil/up_rate_limit_us",
+            Baseline,
+            Int,
+            ""
+        ),
+        e!(
+            "policy0.schedutil.down_rate_limit_us",
+            "/sys/devices/system/cpu/cpufreq/policy0/schedutil/down_rate_limit_us",
+            Baseline,
+            Int,
+            ""
+        ),
+        // Predictive Load: util is floored by WALT's predicted load (early
+        // ramp); 0 = reactive. Evidence: perf XML declares the resource
+        // (commonresourceconfigs 0x11, unused by perfboostsconfig), the
+        // executed moorea post_boot block never writes it, live watch during
+        // a game boost stayed 0, device write/readback verified 2026-10-09.
+        e!(
+            "policy0.schedutil.pl",
+            "/sys/devices/system/cpu/cpufreq/policy0/schedutil/pl",
+            Baseline,
+            Int,
+            ""
+        ),
+        e!(
+            "policy0.core_ctl.min_cpus",
+            "/sys/devices/system/cpu/cpu0/core_ctl/min_cpus",
+            Baseline,
+            MinCpus,
+            "policy0"
+        ),
+        et!(
+            "policy0.core_ctl.task_thres",
+            "/sys/devices/system/cpu/cpu0/core_ctl/task_thres",
+            Baseline,
+            "policy0"
+        ), // core_ctl.c: val >= num_cpus
+        e!(
+            "policy0.core_ctl.busy_up_thres",
+            "/sys/devices/system/cpu/cpu0/core_ctl/busy_up_thres",
+            Baseline,
+            RepeatInt,
+            ""
+        ),
+        e!(
+            "policy0.core_ctl.busy_down_thres",
+            "/sys/devices/system/cpu/cpu0/core_ctl/busy_down_thres",
+            Baseline,
+            RepeatInt,
+            ""
+        ),
+        e!(
+            "policy0.core_ctl.max_cpus",
+            "/sys/devices/system/cpu/cpu0/core_ctl/max_cpus",
+            Baseline,
+            Int,
+            ""
+        ),
+        e!(
+            "policy0.core_ctl.offline_delay_ms",
+            "/sys/devices/system/cpu/cpu0/core_ctl/offline_delay_ms",
+            Baseline,
+            Int,
+            ""
+        ),
+        // --- policy6 (Gold cpu6-7) ---
+        e!(
+            "policy6.scaling_governor",
+            "/sys/devices/system/cpu/cpufreq/policy6/scaling_governor",
+            Baseline,
+            Gov,
+            "policy6"
+        ),
+        e!(
+            "policy6.scaling_min_freq",
+            "/sys/devices/system/cpu/cpufreq/policy6/scaling_min_freq",
+            Baseline,
+            FreqMin,
+            "policy6"
+        ),
+        e!(
+            "policy6.scaling_max_freq",
+            "/sys/devices/system/cpu/cpufreq/policy6/scaling_max_freq",
+            Baseline,
+            FreqMax,
+            "policy6"
+        ),
+        e!(
+            "policy6.schedutil.hispeed_freq",
+            "/sys/devices/system/cpu/cpufreq/policy6/schedutil/hispeed_freq",
+            Baseline,
+            Freq,
+            "policy6"
+        ),
+        e!(
+            "policy6.schedutil.hispeed_load",
+            "/sys/devices/system/cpu/cpufreq/policy6/schedutil/hispeed_load",
+            Baseline,
+            Int,
+            ""
+        ),
+        e!(
+            "policy6.schedutil.up_rate_limit_us",
+            "/sys/devices/system/cpu/cpufreq/policy6/schedutil/up_rate_limit_us",
+            Baseline,
+            Int,
+            ""
+        ),
+        e!(
+            "policy6.schedutil.down_rate_limit_us",
+            "/sys/devices/system/cpu/cpufreq/policy6/schedutil/down_rate_limit_us",
+            Baseline,
+            Int,
+            ""
+        ),
+        // same Predictive Load knob for the gold cluster (evidence above)
+        e!(
+            "policy6.schedutil.pl",
+            "/sys/devices/system/cpu/cpufreq/policy6/schedutil/pl",
+            Baseline,
+            Int,
+            ""
+        ),
+        e!(
+            "policy6.core_ctl.min_cpus",
+            "/sys/devices/system/cpu/cpu6/core_ctl/min_cpus",
+            Baseline,
+            MinCpus,
+            "policy6"
+        ),
+        et!(
+            "policy6.core_ctl.task_thres",
+            "/sys/devices/system/cpu/cpu6/core_ctl/task_thres",
+            Baseline,
+            "policy6"
+        ),
+    ]
+}
