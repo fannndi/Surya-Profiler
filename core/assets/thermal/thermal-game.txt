@@ -3,8 +3,8 @@ algo_type	ss
 sensor		nvm-therm-adc
 device		cpu6
 polling		500
-trig		56000	60000
-clr		52000	58000
+trig		58000	62000
+clr		54000	60000
 target		2169600	1939200
 
 [GAME-SS-CPU0]
@@ -12,8 +12,8 @@ algo_type	ss
 sensor		nvm-therm-adc
 device		cpu0
 polling		500
-trig		58000
-clr		54000
+trig		60000
+clr		56000
 target		1612800
 
 [GAME-MONITOR-GPU]
@@ -21,8 +21,8 @@ algo_type	monitor
 sensor		nvm-therm-adc
 device		gpu
 polling		1000
-trig		58000	62000
-clr		54000	60000
+trig		60000	64000
+clr		56000	62000
 target		1	2
 
 [MONITOR-BAT]
@@ -67,6 +67,6 @@ algo_type	monitor
 sensor		quiet-therm-adc
 device		hotplug_cpu6+hotplug_cpu7+backlight
 polling		1000
-trig		61000
-clr		58000
+trig		63000
+clr		60000
 target		1+1+2048

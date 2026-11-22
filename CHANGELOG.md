@@ -1,5 +1,28 @@
 # Changelog — Surya Profiler
 
+## 0.7.0 — 2026-11-22 (SoC value optimization)
+
+- **Game is now efficiency-first.** Measured on the Epic Seven title screen
+  (60 fps, GPU-bound): the old aggressive CPU/sched/VM/cpuset profile spent
+  **+2.6 % power for no fps gain** and made a CPU/GPU canvas stress page worse
+  (p95 33 ms vs 17 ms). The new Game keeps full CPU/GPU caps, game touch boost
+  (`input_boost_freq=0:1804800`), `top-app.prefer_idle` and the deadline I/O
+  values, with stock CPU/sched/VM/cpuset values. Result: **−1.8 % power vs
+  stock** at identical 60 fps, and the stress-page regression is gone.
+- **Balance verified better than stock.** Chrome scroll, paired 3-minute
+  runs: **−4.4 % power** at identical 60 fps and p95 (17.0 ms), because the
+  profile caps CPU/GPU without touching frame pacing.
+- **Game thermal headroom raised** (user-approved, kernel-limited):
+  SS-CPU6 56/60 → 58/62 °C, SS-CPU0 58 → 60 °C, GPU 58/62 → 60/64 °C,
+  CCC 61 → 63 °C. `MONITOR-BAT`, `MONITOR-BCL`, `MONITOR-TEMP_STATE` and LCD
+  remain; kernel LMH/BCL is still the hard limiter.
+- **R&D:** added a SurfaceFlinger frame-timing harness (real p50/p95/p99/jank
+  for Chrome and GL game surfaces), a 3–5 minute A/B/B/A runner, and an
+  SoC-node write/readback audit. Bus-DCVS/cgroup/sched/popp nodes are
+  writable but produced no measurable win on this build, so they stay
+  documented and uncataloged (slim-build rule).
+- **Version:** crate/app 0.7.0 (versionCode 9).
+
 ## 0.6.0 — 2026-11-22 (correctness + guardrails)
 
 - **Engine:** `core_ctl.min_cpus` now clamps against the `max_cpus` the same

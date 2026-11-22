@@ -39,6 +39,10 @@ Rules:
 - Update `core/src/daemon/bridge/thermal/tests.rs` when changing a frequency/step; the daemon
   verifies the decrypted `decrypt.txt` against these files before selecting a
   profile.
+- Game trips were raised on 2026-11-22 (SS-CPU6 58/62 °C, SS-CPU0 60 °C,
+  GPU 60/64 °C, CCC 63 °C). Kernel LMH/BCL and `MONITOR-BAT`/`TEMP_STATE`
+  remain the hard limit; a sustained >10 min game validation is still the
+  right check after any further trip change.
 
 Stock MIUI remains the fallback: the custom map keeps `0` → vendor
 `thermal-normal.conf`. MIUI camera (12/17/18), phone (8), ARVR (15) and

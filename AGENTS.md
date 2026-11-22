@@ -171,9 +171,13 @@ YouTube video keep-custom, camera yield, performance-mode yield, thermal
 event log/doctor, and daemon exit restore. 0.6.0 (2026-11-22) re-verified
 the full Service OFF UI path (18/18 written, 0 failed, `sconfig=0`), the
 sleep→game `core_ctl` 6/6 wake fix, force-stop/stdin-EOF restore, the CLI
-single-writer gate, and the deployed-pack/stock `doctor` checks. Reboot
-remains covered by the 2026-11-21 run. Evidence:
-`research/DEVICE-E2E-2026-11-19.md`.
+single-writer gate, and the deployed-pack/stock `doctor` checks. 0.7.0
+(2026-11-22) verified the efficient Game profile through the real daemon:
+Epic Seven mapping → `active=game`, `sconfig=61` with the raised thermal
+trips; Service OFF → `active=null / last_mode=restore`, `sconfig=0`, stock
+CPU, all holds released. Reboot remains covered by the 2026-11-21 run.
+Evidence: `research/DEVICE-E2E-2026-11-19.md` and
+`research/RND-SOC-2026-11-22.md`.
 
 ## Known open items
 

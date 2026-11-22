@@ -16,11 +16,14 @@ assumption re-audited on:
 - Rust engine + daemon: **160 unit tests + 13 daemon E2E + 1 watcher test pass**,
   clippy/fmt clean.
 - Android app: **23 JVM tests**, builds (`app-debug.apk`) and is device-tested.
-- Device E2E: **passed 2026-11-22** for v0.6.0 (single-writer gate,
-  sleep→wake `core_ctl` 6/6, full Service OFF UI restore 18/18,
-  force-stop/stdin-EOF restore, deployed-pack/stock doctor), plus the
-  2026-11-20 v0.5.0 thermal suite and the 2026-11-19/20 v0.4.2 suite.
-  Evidence: [research/DEVICE-E2E-2026-11-19.md](research/DEVICE-E2E-2026-11-19.md).
+- Device E2E: **passed 2026-11-22** for v0.7.0 (Game mapping → `sconfig=61`
+  with the raised thermal trips, Service OFF → `sconfig=0` stock restore,
+  `clean` holds released), v0.6.0 (single-writer gate, sleep→wake `core_ctl`
+  6/6, full Service OFF UI restore 18/18, force-stop/stdin-EOF restore,
+  deployed-pack/stock doctor), the 2026-11-20 v0.5.0 thermal suite and the
+  2026-11-19/20 v0.4.2 suite. Evidence:
+  [research/DEVICE-E2E-2026-11-19.md](research/DEVICE-E2E-2026-11-19.md) and
+  [research/RND-SOC-2026-11-22.md](research/RND-SOC-2026-11-22.md).
 
 ## Features
 

@@ -1,0 +1,46 @@
+<!doctype html>
+<html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;padding:0;background:#101014;overflow:hidden}
+  canvas{width:100vw;height:100vh;display:block}
+</style></head><body>
+<canvas id="c" width="540" height="1200"></canvas>
+<script>
+  const q = new URLSearchParams(location.search);
+  const N = parseInt(q.get('n') || '1800', 10);
+  const c = document.getElementById('c');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  const ps = [];
+  for (let i = 0; i < N; i++) {
+    ps.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 2.4,
+      vy: (Math.random() - 0.5) * 2.4,
+      r: 2 + Math.random() * 5,
+      hue: Math.random() * 360
+    });
+  }
+  function tick() {
+    ctx.fillStyle = 'rgba(16,16,20,0.35)';
+    ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i];
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0 || p.x > W) p.vx = -p.vx;
+      if (p.y < 0 || p.y > H) p.vy = -p.vy;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, 6.28318);
+      ctx.fillStyle = 'hsl(' + p.hue + ',80%,60%)';
+      ctx.fill();
+    }
+    // A little layout/JS work independent of canvas.
+    let s = 0;
+    for (let i = 0; i < 2000; i++) s += Math.sqrt(i + ps[i % ps.length].x);
+    window.__s = s;
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+</script>
+</body></html>

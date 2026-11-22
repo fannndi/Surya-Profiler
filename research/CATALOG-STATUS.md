@@ -12,6 +12,16 @@
 > `devfreq/cpu*-cpu-l3-lat/max_freq`, `stune/background/*`,
 > `cpu0/core_ctl/enable`. WALT nodes are absent on this kernel. Evidence
 > and bounds: [RND-BATTERY-PERF-2026-11-21.md](RND-BATTERY-PERF-2026-11-21.md).
+>
+> **2026-11-22 R&D:** bus-DCVS floors (`cpu-cpu-llcc-bw`, `cpu-llcc-ddr-bw`,
+> `cpu*-ddr-latfloor`, `cpu*-cpu-llcc-lat`, `cpu*-llcc-ddr-lat`, `gpubw`),
+> `cpu.shares`, `sched_cstate_aware` and kgsl `popp` are writable and held
+> for 62 s, but produced no measurable scroll/frame win; they stay
+> documented and **uncataloged** (slim-build rule). The Game profile was
+> replaced with a stock-CPU/sched/VM/cpuset variant (full GPU + touch boost
+> + deadline I/O): −1.8 % power vs stock at 60 fps. Balance verified −4.4 %
+> vs stock in Chrome scroll. Evidence:
+> [RND-SOC-2026-11-22.md](RND-SOC-2026-11-22.md).
 
 Sumber: `research/analysis/catalog_miui14.md` (diprobe ulang di device),
 `research/analysis/perf_overlap.md`, `research/rom/init.qcom.post_boot.sh`

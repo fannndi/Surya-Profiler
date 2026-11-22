@@ -23,3 +23,6 @@ core/target/
 research/apk/
 research/raw/
 research/rom/
+
+# Python caches
+__pycache__/

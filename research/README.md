@@ -31,6 +31,7 @@ checks. Device E2E passed 2026-11-20. See `../`,
 | [CATALOG-STATUS.md](CATALOG-STATUS.md) | status 95 entri referensi (92 aktif di 0.2) + overlap perf HAL |
 | [PROFILE-DESIGN.md](PROFILE-DESIGN.md) | constraint desain profil dan kandidat nilai awal |
 | [RND-BATTERY-PERF-2026-11-21.md](RND-BATTERY-PERF-2026-11-21.md) | R&D battery/perf: audit node baru, harness bypass-charging, A/B per skenario, temuan floor interaction-scoped |
+| [RND-SOC-2026-11-22.md](RND-SOC-2026-11-22.md) | R&D SoC lanjutan: bus-DCVS audit, frame-time harness, Game efficiency, Balance −4.4 %, thermal headroom |
 | [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) | hal yang belum terverifikasi / keputusan slim build |
 | [DEVICE-E2E-2026-11-19.md](DEVICE-E2E-2026-11-19.md) | hasil E2E app/daemon di device (apply, sleep/wake, mapping, saver, multi-window, R&D input suspend, true service off) |
 
