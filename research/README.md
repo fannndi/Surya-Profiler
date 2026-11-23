@@ -32,6 +32,8 @@ checks. Device E2E passed 2026-11-20. See `../`,
 | [PROFILE-DESIGN.md](PROFILE-DESIGN.md) | constraint desain profil dan kandidat nilai awal |
 | [RND-BATTERY-PERF-2026-11-21.md](RND-BATTERY-PERF-2026-11-21.md) | R&D battery/perf: audit node baru, harness bypass-charging, A/B per skenario, temuan floor interaction-scoped |
 | [RND-SOC-2026-11-22.md](RND-SOC-2026-11-22.md) | R&D SoC lanjutan: bus-DCVS audit, frame-time harness, Game efficiency, Balance −4.4 %, thermal headroom |
+| [REFERENCES-2026-11-23.md](REFERENCES-2026-11-23.md) | audit 4 repo referensi (Scene/XiaomiParts/mi-thermal-crypt/GameSpace), fakta live device, guard+doctor baru, tabel tuning per-app sm6150, lisensi |
+| [REA-2026-11-23.md](REA-2026-11-23.md) | RE mi_thermald/PowerKeeper/perf-HAL (REA/Ghidra/JADX): inotify sconfig+config-dir, model ID+offset PowerKeeper, 26 node shared dengan perf HAL, guard `/dev/cpuctl` |
 | [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) | hal yang belum terverifikasi / keputusan slim build |
 | [DEVICE-E2E-2026-11-19.md](DEVICE-E2E-2026-11-19.md) | hasil E2E app/daemon di device (apply, sleep/wake, mapping, saver, multi-window, R&D input suspend, true service off) |
 

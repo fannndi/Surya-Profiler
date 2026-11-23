@@ -210,6 +210,16 @@ mod tests {
         assert!(guard_path("/sys/module/cpu_boost/parameters/input_boost_freq").is_ok());
         assert!(guard_path("/sys/module/cpu_boost/parameters/powerkey_input_boost_freq").is_err());
         assert!(guard_path("/sys/module/cpu_boost/parameters/input_boost_ms").is_err());
+        // 2026-11-23 reference audit: sched-boost family variants and the
+        // vendor-owned UFS clock-scaling nodes (evidence:
+        // research/REFERENCES-2026-11-23.md).
+        assert!(guard_path("/proc/sys/kernel/sched_boost_top_app").is_err());
+        assert!(guard_path("/proc/sys/kernel/sched_prefer_sync_wakee_to_waker").is_err());
+        assert!(guard_path("/sys/devices/platform/soc/1d84000.ufshc/clkscale_enable").is_err());
+        assert!(guard_path("/sys/devices/platform/soc/1d84000.ufshc/clkgate_enable").is_err());
+        assert!(
+            guard_path("/sys/devices/platform/soc/1d84000.ufshc/hibern8_on_idle_enable").is_err()
+        );
     }
 
     #[test]

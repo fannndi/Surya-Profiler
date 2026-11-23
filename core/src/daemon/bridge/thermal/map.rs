@@ -57,7 +57,9 @@ pub(crate) fn render_map(entries: &[(i32, String)]) -> String {
 pub(crate) fn vendor_map_entries_at(root: &Path) -> Result<Vec<(i32, String)>, String> {
     let path = root.join("vendor/etc/thermal-map.conf");
     let bytes = fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let plain = crypt::decrypt(&bytes)?;
+    // Some MIUI builds ship the map unencrypted (Scene tooling documents
+    // this); fall back to plain text instead of losing the stock entries.
+    let plain = crypt::decrypt_or_plain(&bytes)?;
     let text = String::from_utf8(plain).map_err(|e| format!("vendor thermal map: {e}"))?;
     parse_map(&text)
 }

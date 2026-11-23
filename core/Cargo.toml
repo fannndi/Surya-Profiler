@@ -19,6 +19,9 @@ serde_json = "1"
 aes = "0.8"
 cbc = { version = "0.1", features = ["alloc"] }
 
+[dev-dependencies]
+sha2 = "0.10"
+
 [profile.release]
 opt-level = "z"
 lto = true

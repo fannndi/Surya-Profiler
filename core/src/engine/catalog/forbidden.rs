@@ -118,6 +118,20 @@ pub const FORBIDDEN_PREFIXES: &[&str] = &[
     // (ls /proc/sys/kernel has no sched_coloc_* nodes) -> future-proof guard.
     "/proc/sys/kernel/sched_coloc_busy_hyst",
     "/proc/sys/kernel/sched_coloc_downmigrate",
+    // Scene/powercfg writes these on other kernels; both ABSENT on surya
+    // (kernel 4.14.190, live-verified 2026-11-23: only plain `sched_boost`,
+    // already perf-HAL-owned above, exists). Family = sched boost surface.
+    "/proc/sys/kernel/sched_boost_top_app",
+    // 5.x-only upstream node, ABSENT on 4.14.190 (same live check).
+    "/proc/sys/kernel/sched_prefer_sync_wakee_to_waker",
+    // UFS clock scaling/gating is written by vendor init
+    // (/vendor/etc/init/hw/init.qcom.rc writes clkscale_enable 0/1; the
+    // devfreq view /sys/class/devfreq/1d84000.ufshc is already guarded).
+    // Live-verified 2026-11-23: nodes exist (root:root 0644, values 1) with
+    // fresh mtimes -> active writer. libqti-perfd storage-scaling family.
+    "/sys/devices/platform/soc/1d84000.ufshc/clkscale_enable",
+    "/sys/devices/platform/soc/1d84000.ufshc/clkgate_enable",
+    "/sys/devices/platform/soc/1d84000.ufshc/hibern8_on_idle_enable",
     // charger/parallel/USB power paths are micharge + charger-HW owned;
     // our charge surface stays strictly under /battery.
     "/sys/class/power_supply/main/",

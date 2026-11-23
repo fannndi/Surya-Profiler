@@ -28,6 +28,8 @@ pub use holds::HoldsInfo;
 pub use holds::ReleaseReport;
 pub use sync::SyncCtx;
 pub use thermal::cleanup_orphan as cleanup_thermal;
+pub use thermal::files_fix as thermal_files_fix;
+pub use thermal::files_scan as thermal_files_scan;
 
 /// Read-only thermal takeover inspection for `doctor`.
 pub fn thermal_inspect() -> serde_json::Value {

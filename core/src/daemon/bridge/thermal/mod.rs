@@ -49,6 +49,7 @@ use std::time::Duration;
 pub(crate) const MARKER_NAME: &str = ".suryaprofiler";
 pub(crate) const MARKER_BODY: &str = "surya-profiler thermal takeover v2\n";
 
+mod files;
 mod install;
 mod io;
 mod map;
@@ -63,7 +64,9 @@ mod sync;
 mod tests;
 
 pub(crate) use install::{install_all, remove_owned};
-pub(crate) use io::{normalize, read_i32, verify_loaded, write_atomic, write_text};
+pub(crate) use io::{
+    config_file_allowed, normalize, read_i32, verify_loaded, write_atomic, write_text,
+};
 pub(crate) use map::{build_map, map_contains_owned, parse_map};
 pub(crate) use paths::marker_exists;
 pub(crate) use paths::{
@@ -78,6 +81,16 @@ pub(crate) use profile::{
     PREVIEW_INDICES,
 };
 pub(crate) use select::{select_profile, SelectOutcome};
+
+/// Read-only foreign-file scan for `doctor`. Safe at any time.
+pub fn files_scan() -> Value {
+    files::scan()
+}
+
+/// Removes foreign thermal ships + repairs dir metadata (CLI-only, daemon off).
+pub fn files_fix() -> Value {
+    files::fix()
+}
 
 pub fn cleanup_orphan() -> Result<(), String> {
     if !marker_path().exists() && !map_contains_owned() {

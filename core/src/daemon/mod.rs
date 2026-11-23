@@ -38,6 +38,8 @@ mod worker;
 
 pub use bridge::clean_holds;
 pub use bridge::cleanup_thermal;
+pub use bridge::thermal_files_fix;
+pub use bridge::thermal_files_scan;
 pub use bridge::thermal_inspect;
 pub use bridge::ReleaseReport;
 pub use proto::{Command, Event, Publisher, Snapshot, VERSION};

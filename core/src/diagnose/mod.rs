@@ -50,7 +50,7 @@ fn euid_is_root() -> bool {
         .unwrap_or(false)
 }
 
-pub fn run(state_dir: &Path, config_path: Option<&Path>) -> (bool, Value) {
+pub fn run(state_dir: &Path, config_path: Option<&Path>, fix_thermal: bool) -> (bool, Value) {
     let mut r = Report::new();
 
     // --- root ---------------------------------------------------------------
@@ -135,6 +135,7 @@ pub fn run(state_dir: &Path, config_path: Option<&Path>) -> (bool, Value) {
     let env = crate::engine::env::Sampler::new(&root).sample();
     env_checks::run(&mut r, &env);
     thermal_checks::run(&mut r, &root);
+    thermal_files::run(&mut r, fix_thermal);
 
     // --- MIUI background readiness (informational) ------------------------------
     let (whitelist_ok, whitelist_detail) = battery_whitelist_check();
@@ -264,6 +265,7 @@ mod battery;
 mod env_checks;
 mod miui;
 mod thermal_checks;
+mod thermal_files;
 
 #[cfg(test)]
 mod tests;

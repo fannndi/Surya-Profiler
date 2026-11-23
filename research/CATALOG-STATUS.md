@@ -5,6 +5,15 @@
 > **92**. The remaining charge node is `charge.input_suspend` (R&D only).
 > This document stays as the 95-entry R&D reference.
 >
+> **2026-11-23 guard additions (live-verified):** no new catalog nodes; three
+> forbidden guards added from the reference-repo audit
+> ([REFERENCES-2026-11-23.md](REFERENCES-2026-11-23.md)) —
+> `sched_boost_top_app` + `sched_prefer_sync_wakee_to_waker` (absent on
+> kernel 4.14.190, future-proof) and UFS
+> `1d84000.ufshc/{clkscale,clkgate,hibern8}_enable` (vendor
+> `init.qcom.rc`-owned, fresh mtimes = active writer). The vendor thermal-map
+> reader now tolerates plaintext maps (`decrypt_or_plain`).
+>
 > **2026-11-21 R&D:** additional SoC nodes were audited (write/readback/
 > restore verified on device) but **not cataloged** — stock values are
 > already optimal and no profile uses them: kgsl `ifpc`/`bus_split`/

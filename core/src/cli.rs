@@ -22,6 +22,8 @@ struct Args {
     profiles: Option<PathBuf>,
     /// `serve` only: config.json the app owns (default: <state-dir>/config.json).
     config: Option<PathBuf>,
+    /// `doctor` only: remove foreign thermal ships after the scan.
+    fix_thermal: bool,
 }
 
 fn parse_args(argv: &[String]) -> Result<Args, String> {
@@ -30,6 +32,7 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
     let mut state_dir = apply::default_state_dir();
     let mut profiles: Option<PathBuf> = None;
     let mut config: Option<PathBuf> = None;
+    let mut fix_thermal = false;
     let mut i = 0;
     while i < argv.len() {
         let a = &argv[i];
@@ -50,6 +53,7 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
                 let v = argv.get(i).ok_or("--config needs a value")?;
                 config = Some(PathBuf::from(v));
             }
+            "--fix-thermal" => fix_thermal = true,
             "--help" | "-h" => {
                 return Err(String::new()); // usage, not an error
             }
@@ -72,6 +76,7 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
         state_dir,
         profiles,
         config,
+        fix_thermal,
     })
 }
 
@@ -87,7 +92,9 @@ commands:
   verify <id>           check live values vs profile, detect drift
   status                active profile, snapshot, framework evidence
   serve                 stdio daemon (JSON-lines on stdin/stdout)
-  doctor                environment self-check (root/binaries/config/state)
+  doctor [--fix-thermal]
+                        environment self-check; --fix-thermal also removes
+                        foreign thermal ships (root, daemon must be stopped)
   thermal-clean         remove an orphaned Surya thermal takeover (root)
   catalog               dump the full parameter catalog as JSON
   apply runs one automatic re-plan pass when a governor switch reveals

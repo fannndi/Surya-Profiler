@@ -125,12 +125,17 @@ pub(super) fn run(a: &Args) -> Result<(i32, String), String> {
             Ok((0, payload))
         }
         "doctor" => {
-            // environment self-check (device debugging without the app)
+            // environment self-check (device debugging without the app);
+            // --fix-thermal additionally removes foreign thermal ships.
+            if a.fix_thermal {
+                require_root()?;
+                daemon::ensure_no_daemon(&a.state_dir)?;
+            }
             let config = a
                 .config
                 .clone()
                 .unwrap_or_else(|| a.state_dir.join("config.json"));
-            let (ok, payload) = diagnose::run(&a.state_dir, Some(&config));
+            let (ok, payload) = diagnose::run(&a.state_dir, Some(&config), a.fix_thermal);
             let json = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
             Ok((if ok { 0 } else { 1 }, json))
         }

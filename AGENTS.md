@@ -112,7 +112,7 @@ the catalog guard.
 | `src/daemon/evaluate.rs` | decision point + 3 s supervisor |
 | `src/daemon/worker.rs` | coalescing apply worker |
 | `src/daemon/bridge/thermal/` | profile/paths/io/perf/map/install/select/sync/release |
-| `src/diagnose/` | `doctor` self-check (battery/miui/env/thermal) |
+| `src/diagnose/` | `doctor` self-check (battery/miui/env/thermal/thermal-files) |
 | `assets/thermal/` | plaintext balance/game/powersave/sleep configs (encrypted at runtime) |
 | `tests/` | host E2E: protocol, foreground watcher, multi-window probe |
 
@@ -196,3 +196,10 @@ Evidence: `research/DEVICE-E2E-2026-11-19.md` and
 - Thermal takeover is opt-in via `custom_thermal` (default on). A failed
   cleanup keeps the service ON; `surya-prof thermal-clean` repairs a crash
   leftover. Thresholds/evidence: `research/THERMAL-MIUI14.md`.
+- Reference-repo audit (2026-11-23): new `doctor --fix-thermal` removes
+  foreign ships in `/data/vendor/thermal/config` (other tools' files shadow
+  the vendor config at `sconfig=0`) — CLI-only, daemon must be stopped.
+  Evidence: `research/REFERENCES-2026-11-23.md`.
+- Thread-affinity per-app (Scene-style `taskset` mapping) is designed but
+  NOT implemented (Fase 6, opt-in default off); see the design section of
+  the same research note.

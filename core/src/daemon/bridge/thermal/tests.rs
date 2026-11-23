@@ -245,3 +245,119 @@ mod guard_tests {
         assert!(!config_file_allowed("thermal-balance.conf.tmp"));
     }
 }
+
+// --- foreign-file scanner (bridge/thermal/files.rs) --------------------------
+
+#[test]
+fn clean_stock_config_dir_reports_clean() {
+    let root = tmp("files-clean");
+    fs::create_dir_all(root.join("data/vendor/thermal/config")).unwrap();
+    let s = files::scan_at(&root);
+    assert_eq!(s["clean"], json!(true));
+    assert_eq!(s["foreign"], json!([]));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn foreign_blob_and_plaintext_are_flagged_owned_not() {
+    let root = tmp("files-foreign");
+    let config = root.join("data/vendor/thermal/config");
+    fs::create_dir_all(&config).unwrap();
+    // A foreign encrypted conf (valid blob, unknown name).
+    fs::write(
+        config.join("thermal-foreign.conf"),
+        crypt::encrypt(b"[SS-CPU7] trig 48000"),
+    )
+    .unwrap();
+    // A foreign plaintext map (some builds ship these).
+    fs::write(
+        config.join("thermal-map.conf.alt"),
+        b"[0:thermal-normal.conf]\n[9:thermal-tgame.conf]\n",
+    )
+    .unwrap();
+    // Garbage binary.
+    fs::write(config.join("leftover.bin"), [0u8; 32]).unwrap();
+    // Our own marker-owned files must never be flagged.
+    fs::write(config.join(MARKER_NAME), MARKER_BODY).unwrap();
+    fs::write(
+        config.join("thermal-balance.conf"),
+        crypt::encrypt(b"[SS-CPU7] trig 48000"),
+    )
+    .unwrap();
+    let s = files::scan_at(&root);
+    let names: Vec<&str> = s["foreign"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "leftover.bin",
+            "thermal-foreign.conf",
+            "thermal-map.conf.alt"
+        ]
+    );
+    let kinds: Vec<&str> = s["foreign"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(kinds, ["unknown-binary", "encrypted-conf", "plaintext-map"]);
+    let owned: Vec<&str> = s["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["owned"].as_bool().unwrap_or(false))
+        .map(|e| e["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(owned, [MARKER_NAME, "thermal-balance.conf"]);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn fix_removes_only_foreign_files() {
+    let root = tmp("files-fix");
+    let config = root.join("data/vendor/thermal/config");
+    fs::create_dir_all(&config).unwrap();
+    fs::write(
+        config.join("thermal-foreign.conf"),
+        crypt::encrypt(b"[SS-CPU7] x"),
+    )
+    .unwrap();
+    fs::write(config.join(MARKER_NAME), MARKER_BODY).unwrap();
+    let report = files::fix_at(&root);
+    assert_eq!(report["removed"], json!(["thermal-foreign.conf"]));
+    assert!(report["failed"].as_array().unwrap().is_empty());
+    assert_eq!(report["clean_after"], json!(true));
+    assert!(config.join(MARKER_NAME).exists(), "marker must survive");
+    assert!(!config.join("thermal-foreign.conf").exists());
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn module_ships_are_detected() {
+    let root = tmp("files-modules");
+    let moddir = root.join("data/adb/modules/example-mod/system/vendor/etc");
+    fs::create_dir_all(&moddir).unwrap();
+    fs::write(
+        moddir.join("thermal-map.conf"),
+        b"[0:thermal-normal.conf]\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("data/adb/modules/example-mod/module.prop"),
+        b"id=example-mod",
+    )
+    .unwrap();
+    let s = files::scan_at(&root);
+    assert_eq!(s["modules"][0]["module"], json!("example-mod"));
+    assert_eq!(
+        s["modules"][0]["files"],
+        json!(["system/vendor/etc/thermal-map.conf"])
+    );
+    assert_eq!(s["clean"], json!(false));
+    let _ = fs::remove_dir_all(&root);
+}
