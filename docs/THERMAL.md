@@ -45,12 +45,12 @@ fallbacks when absent.
 - `install.rs` / `select.rs` / `sync.rs` / `release.rs`
 
 The only sysfs node written is `thermal_message/sconfig`; config files are
-allowlisted by name. Detailed evidence: `research/THERMAL-MIUI14.md`.
+allowlisted by name. Detailed evidence: `docs/EVIDENCE-THERMAL.md`.
 
 ## REA-confirmed internals (2026-11-23)
 
 Decompiled from the shipped binaries (evidence:
-`research/REA-2026-11-23.md`):
+`docs/HISTORY.md`):
 
 - **`mi_thermald` reload triggers** — two inotify watches, mask `IN_MODIFY`:
   (1) `thermal_message/sconfig` — every write makes it re-read the node and,

@@ -41,4 +41,4 @@ MIUI 14, root APatch.
 - [ ] Service ON survives reboot; boot receiver starts the daemon.
 - [ ] No `holds.json` leftovers after a clean stop.
 
-Evidence goes into `research/DEVICE-E2E-2026-11-19.md`.
+Evidence goes into `docs/HISTORY.md` (dated section).

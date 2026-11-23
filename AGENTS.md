@@ -3,14 +3,32 @@
 Device: **POCO X3 NFC, surya / sm6150 / SDMMAGPIE, MIUI 14 V14.0.2.0.SJGIDXM,
 Android 12 / SDK 31, kernel 4.14.190, root APatch**.
 
-Read the R&D evidence before changing the engine/catalog:
+Read the R&D evidence before changing the engine/catalog (consolidated
+2026-11-24 — the old `research/` tree now lives under `docs/`):
 
-- `research/DEVICE-FACTS.md`
-- `research/MIUI14-DELTAS.md`
-- `research/RUNTIME-BEHAVIOR.md`
-- `research/CATALOG-STATUS.md`
-- `research/PROFILE-DESIGN.md`
-- `research/REA-2026-11-23.md`
+- `docs/EVIDENCE-DEVICE.md` — device facts, MIUI deltas, runtime behavior,
+  scheduler R&D, log signals, the full 95-entry catalog probe
+- `docs/EVIDENCE-THERMAL.md` — thermal evidence, catalog status, profile
+  design, the reference value matrix and the perf-HAL resource overlap
+- `docs/ROM-HARMONY.md` — who owns every node (writer chains, shared
+  surface, boost hint inventory)
+- `docs/HISTORY.md` — dated device-E2E and RE-session evidence (full text)
+- `docs/OPEN-QUESTIONS.md` — the live backlog
+
+## Doc map
+
+| File | What it is |
+|---|---|
+| `README.md` | project landing (GitHub) |
+| `AGENTS.md` | this file — the agent/LLM entry point |
+| `CHANGELOG.md` | version history |
+| `docs/ARCHITECTURE.md` | layering rules and data flow |
+| `docs/PROTOCOL.md` | daemon ↔ app JSON-lines protocol |
+| `docs/THERMAL.md` | thermal takeover design + REA-confirmed internals |
+| `docs/ROM-HARMONY.md` | node ownership map (shared/forbidden) |
+| `docs/DEVICE-E2E.md` | the device E2E checklist to run per release |
+| `docs/EVIDENCE-*.md`, `docs/HISTORY.md`, `docs/OPEN-QUESTIONS.md` | R&D evidence (read-only; do not edit without adding a dated section) |
+| `tools/` | one-off R&D scripts + `perf-hal-runtime-writers.txt` |
 
 ## Architecture in one paragraph
 
@@ -99,7 +117,7 @@ the catalog guard.
 | `src/engine/catalog/forbidden.rs` | framework-owned paths / ALLOWED_EXACT |
 | `src/engine/probe.rs` | read-only capture + option lists |
 | `src/engine/env/` | telemetry model/parsers/sampler/scenario/sysfs |
-| `src/engine/thermal_scenario.rs` | PowerKeeper `sconfig` ID/offset decoder |
+| `src/engine/thermal_scenario/` | PowerKeeper `sconfig` ID/offset decoder + SP-game list |
 | `src/engine/thermal_log.rs` | `mi_thermald` dump parser |
 | `src/engine/crypt.rs` | AES-128-CBC encrypt/decrypt for thermal configs |
 | `src/platform.rs` | process runner with timeout/backpressure |
@@ -112,7 +130,7 @@ the catalog guard.
 | `src/daemon/commands.rs` | command dispatch + foreground/peek plumbing |
 | `src/daemon/evaluate.rs` | decision point + 3 s supervisor |
 | `src/daemon/worker.rs` | coalescing apply worker |
-| `src/daemon/bridge/thermal/` | profile/paths/io/perf/map/install/select/sync/release |
+| `src/daemon/bridge/thermal/` | profile/paths/io/perf/map/install/select/sync/release/files |
 | `src/diagnose/` | `doctor` self-check (battery/miui/env/thermal/thermal-files) |
 | `assets/thermal/` | plaintext balance/game/powersave/sleep configs (encrypted at runtime) |
 | `tests/` | host E2E: protocol, foreground watcher, multi-window probe |
@@ -145,6 +163,45 @@ the catalog guard.
 Architecture: `docs/ARCHITECTURE.md`; protocol: `docs/PROTOCOL.md`; thermal:
 `docs/THERMAL.md`; device matrix: `docs/DEVICE-E2E.md`.
 
+## Testing conventions (LLM: follow these exactly)
+
+- **Production files contain zero test code.** Every module's unit tests
+  live in a sibling `<name>/tests.rs` (`daemon/proto.rs` + `proto/tests.rs`)
+  or, for directory modules, in the module dir (`env/tests.rs`). The
+  arch-checker only exempts `*/tests.rs` from the 300-line cap — keep it
+  that way instead of moving logic into test files.
+- `testutil.rs` / `test_util.rs` are `cfg(test)`-gated fixtures INSIDE the
+  crate (unit tests need crate-private access; they cannot move to
+  `core/tests/`). They build the one fake surya device.
+- Host E2E lives in `core/tests/` (`daemon_smoke.rs`, `daemon_watchers.rs`,
+  `common/`, `fixtures/`) and runs without a device using the env vars in
+  the table below.
+- Kotlin tests are JVM-only in `app/src/test/`; no tests inside
+  `app/src/main`.
+- Run everything with `./scripts/check.sh`; it also enforces asset
+  lockstep and the architecture rules.
+
+### Adding a catalog node (checklist)
+
+1. Confirm nobody else writes it: check `docs/ROM-HARMONY.md` (writer
+   chains + shared list) and `docs/EVIDENCE-THERMAL.md` (perf-HAL
+   overlap). Framework-shared nodes stay shared (Baseline + reconcile),
+   never forbidden.
+2. Live-verify on device: existence, permissions, owner, fresh mtimes
+   (`adb shell su -c ...`), and add the evidence to `docs/HISTORY.md`
+   (dated section).
+3. Add the entry to `core/src/engine/catalog/entries/` (correct file by
+   kind) — `guard_path` rejects anything not cataloged, so this IS the
+   allowlist.
+4. Add kind-specific validation/plan/readback handling only if the value
+   shape is new.
+5. `cargo test --lib`, then device E2E (`docs/DEVICE-E2E.md`).
+
+### Device E2E quickstart
+
+`./scripts/build.sh && ./scripts/deploy.sh`, then follow
+`docs/DEVICE-E2E.md`. Mandatory for engine/daemon changes (hard rule 12).
+
 ## Host simulation env vars
 
 | Env var | Replaces |
@@ -176,9 +233,12 @@ single-writer gate, and the deployed-pack/stock `doctor` checks. 0.7.0
 (2026-11-22) verified the efficient Game profile through the real daemon:
 Epic Seven mapping → `active=game`, `sconfig=61` with the raised thermal
 trips; Service OFF → `active=null / last_mode=restore`, `sconfig=0`, stock
-CPU, all holds released. Reboot remains covered by the 2026-11-21 run.
-Evidence: `research/DEVICE-E2E-2026-11-19.md` and
-`research/RND-SOC-2026-11-22.md`.
+CPU, all holds released. 0.7.1/0.7.2 (2026-11-23/24) verified the
+foreign-file scanner E2E (`doctor --fix-thermal`), the REA-derived
+ownership map, and a full real-game run with Seven Knights
+(`sconfig=61`, no MIUI override, base re-assert, stock restore). Reboot
+remains covered by the 2026-11-21 run.
+Evidence: `docs/HISTORY.md`.
 
 ## Known open items
 
@@ -196,11 +256,11 @@ Evidence: `research/DEVICE-E2E-2026-11-19.md` and
   this is idempotent and verified, not drift.
 - Thermal takeover is opt-in via `custom_thermal` (default on). A failed
   cleanup keeps the service ON; `surya-prof thermal-clean` repairs a crash
-  leftover. Thresholds/evidence: `research/THERMAL-MIUI14.md`.
+  leftover. Thresholds/evidence: `docs/EVIDENCE-THERMAL.md`.
 - Reference-repo audit (2026-11-23): new `doctor --fix-thermal` removes
   foreign ships in `/data/vendor/thermal/config` (other tools' files shadow
   the vendor config at `sconfig=0`) — CLI-only, daemon must be stopped.
-  Evidence: `research/REFERENCES-2026-11-23.md`.
+  Evidence: `docs/HISTORY.md`.
 - Thread-affinity per-app (Scene-style `taskset` mapping) is designed but
   NOT implemented (Fase 6, opt-in default off); see the design section of
-  the same research note.
+  `docs/HISTORY.md`.

@@ -1,0 +1,36 @@
+# perf HAL runtime writers — evidence record (reconstructed 2026-11-24)
+#
+# Referenced by core/src/engine/catalog/forbidden.rs. Original observations
+# were taken live on surya (MIUI 14, kernel 4.14.190); this file is the
+# consolidated record after the 2026-11-23/24 REA session
+# (see docs/HISTORY.md, section REA-2026-11-23).
+
+## Chain (REA-confirmed)
+com.miui.powerkeeper -> vendor.perfservice (IPerfManager proxy, writes NO
+nodes) -> vendor.qti.hardware.perf@2.2-service -> libqti-perfd.so
++ libperfconfig.so -> /vendor/etc/perf/*.xml -> nodes.
+android.hardware.power-service (AIDL) also forwards hints to the same perf
+HAL (dlopen libqti-perfd-client.so, reads /vendor/etc/powerhint.xml via
+libxml2). libqti-perfd is the ONLY node writer in the QTI chain.
+
+## Nodes the perf HAL declares as resources
+Declarative source: /vendor/etc/perf/commonresourceconfigs.xml +
+targetresourceconfigs.xml (186 unique nodes; full overlap table in
+docs/EVIDENCE-THERMAL.md, "Perf HAL resource overlap"). Highlights:
+msm_performance/*, sched_boost (+ per-task /proc/<pid>/sched_boost),
+schedutil hispeed/pl/rtg_boost_freq, cpuset cpus, stune boost/prefer_idle/
+colocate, cpuctl uclamp, kgsl pwrlevels + devfreq min/max, bus_dcvs/llcc/
+cpubw/memlat devfreqs, lpm_levels, process_reclaim, vm/swap_ratio,
+cpu_boost input_boost_freq, /dev/cpu_dma_latency.
+
+## Runtime writer observations (pre-REA, live device)
+- perfd raises/lowers scaling_min_freq floors on screen-on; MIUI's floor
+  is interaction-scoped (wake boost ~3 s, touch blip ~1 s) — captured in
+  research/RUNTIME-BEHAVIOR.md (now docs/EVIDENCE-DEVICE.md).
+- perfd default_values index_113 seeds input_boost_freq (0:1324800);
+  post_boot writes the same value — the node is SHARED, our Baseline
+  writes are reconciled by the supervisor.
+- sched_boost is written at hint time (values 1/2/3 decoded from
+  perfboostsconfig.xml opcodes 0x40C00000); forbidden for us.
+- 0.4.2 E2E observed msm_performance/cpu_max_freq writes arriving during
+  app launch boosts; the msm_performance prefix stays forbidden.

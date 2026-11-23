@@ -2,7 +2,7 @@
 
 Surya-Profiler coexists with MIUI instead of fighting it. This document maps
 every tuning surface to its owner, derived from the shipped binaries
-(RE-confirmed 2026-11-23, see `research/REA-2026-11-23.md`) plus the vendor's
+(RE-confirmed 2026-11-23, see `docs/HISTORY.md`) plus the vendor's
 own declarative configs. The engine enforces this via
 `engine::catalog::guard_path` (membership gate + `FORBIDDEN_PREFIXES`).
 
@@ -73,7 +73,7 @@ SPECIAL_NODE set (lock_max_cores, display_off, irq_balancer, …).
 ## Boost hint inventory (sdmmagpie, `perfboostsconfig.xml`)
 
 Timeouts are the transient windows MIUI/QTI boosts run for — they explain
-the observed floor decay times in `research/RUNTIME-BEHAVIOR.md`:
+the observed floor decay times in `docs/EVIDENCE-DEVICE.md`:
 
 | Hint | Type | Timeout | Effect (decoded from opcodes/values) |
 |---|---|---:|---|

@@ -85,5 +85,4 @@ Compose UI ──► ViewModel ──► DynamicProfileService / DaemonLink ─�
 ./scripts/deploy.sh         # adb install + health summary
 ```
 
-Device evidence lives in `research/DEVICE-E2E-2026-11-19.md` and
-`research/THERMAL-MIUI14.md`.
+Device evidence lives in `docs/HISTORY.md` and `docs/EVIDENCE-THERMAL.md`.

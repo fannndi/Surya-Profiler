@@ -1,5 +1,39 @@
 # Changelog — Surya Profiler
 
+> 2026-11-24: the `research/` tree was consolidated into `docs/`
+> (`EVIDENCE-DEVICE`, `EVIDENCE-THERMAL`, `HISTORY`, `OPEN-QUESTIONS`);
+> older entries below still name the original paths.
+
+## 0.7.2 — 2026-11-24 (REA ownership map)
+
+- Reverse-engineered the shipped MIUI/QTI components with REA (Ghidra for
+  ELF, JADX for APK): `mi_thermald` (inotify on `sconfig` + the config
+  dir, data-dir shadowing, map IDs < 65), `com.miui.powerkeeper`
+  (ID space 0–24, offsets +30/+100/+200, performance-mode chain,
+  per-game −2 °C virtual-sensor compensation list), `perfservice`
+  (pure binder proxy), `power-hal` (reads `/vendor/etc/powerhint.xml`).
+- Decoded the `perfboostsconfig.xml` hint inventory (sdmmagpie) and
+  classified **26 catalog nodes as SHARED** with the perf HAL;
+  `/dev/cpuctl` added to the forbidden guard.
+- `thermal_scenario`: base 0–24, REA-confirmed offsets, `is_miui_sp_game`;
+  diag gains `miui_sp_game` and the Thermal card explains the compensation.
+- `docs/ROM-HARMONY.md` — the node-ownership map. E2E with a real game
+  (Seven Knights): `sconfig=61`, no MIUI override, base re-assert, stock
+  restore.
+
+## 0.7.1 — 2026-11-23 (reference-repo audit)
+
+- Forbidden guard +5 (live-verified): `sched_boost_top_app`,
+  `sched_prefer_sync_wakee_to_waker`, UFS
+  `1d84000.ufshc/{clkscale,clkgate,hibern8}_enable`.
+- `crypt.rs`: differential vectors against the reference
+  `mi-thermal-crypt` binary; `is_encrypted` + `decrypt_or_plain`
+  (plaintext vendor maps tolerated).
+- `doctor --fix-thermal`: foreign-file scanner/repair in
+  `/data/vendor/thermal/config` (classification, module ships,
+  `chattr -R -i` → remove → `restorecon -DFR`); CLI-only, daemon stopped.
+
+
 ## 0.7.0 — 2026-11-22 (SoC value optimization)
 
 - **Game is now efficiency-first.** Measured on the Epic Seven title screen

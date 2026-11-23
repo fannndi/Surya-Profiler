@@ -13,8 +13,7 @@ assumption re-audited on:
 
 ## Status
 
-- Rust engine + daemon: **160 unit tests + 13 daemon E2E + 1 watcher test pass**,
-  clippy/fmt clean.
+- Rust engine + daemon: **168 unit tests + 14 daemon E2E pass**, clippy/fmt clean.
 - Android app: **23 JVM tests**, builds (`app-debug.apk`) and is device-tested.
 - Device E2E: **passed 2026-11-22** for v0.7.0 (Game mapping → `sconfig=61`
   with the raised thermal trips, Service OFF → `sconfig=0` stock restore,
@@ -22,8 +21,7 @@ assumption re-audited on:
   6/6, full Service OFF UI restore 18/18, force-stop/stdin-EOF restore,
   deployed-pack/stock doctor), the 2026-11-20 v0.5.0 thermal suite and the
   2026-11-19/20 v0.4.2 suite. Evidence:
-  [research/DEVICE-E2E-2026-11-19.md](research/DEVICE-E2E-2026-11-19.md) and
-  [research/RND-SOC-2026-11-22.md](research/RND-SOC-2026-11-22.md).
+  Evidence: [docs/HISTORY.md](docs/HISTORY.md).
 
 ## Features
 
@@ -47,7 +45,7 @@ Removed on purpose: per-app DND, refresh-rate follow, charge limit,
 bypass-charging policy, battery/thermal guards, quiet hours, backup/import,
 boost/jank overlay, storage maintenance, and the game-mode checker. The
 project is intentionally small. The scheduler/WALT track is R&D only
-([research/SCHEDULER-MIUI14.md](research/SCHEDULER-MIUI14.md)).
+([docs/EVIDENCE-DEVICE.md](docs/EVIDENCE-DEVICE.md)).
 
 ## Architecture
 
@@ -130,10 +128,9 @@ into `app_map`, and every removed key is dropped.
 
 Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), protocol: [docs/PROTOCOL.md](docs/PROTOCOL.md), thermal: [docs/THERMAL.md](docs/THERMAL.md).
 
-Full evidence: [research/DEVICE-FACTS.md](research/DEVICE-FACTS.md),
-[research/MIUI14-DELTAS.md](research/MIUI14-DELTAS.md),
-[research/RUNTIME-BEHAVIOR.md](research/RUNTIME-BEHAVIOR.md),
-[research/THERMAL-MIUI14.md](research/THERMAL-MIUI14.md).
+Full evidence: [docs/EVIDENCE-DEVICE.md](docs/EVIDENCE-DEVICE.md),
+[docs/EVIDENCE-THERMAL.md](docs/EVIDENCE-THERMAL.md),
+[docs/ROM-HARMONY.md](docs/ROM-HARMONY.md), [docs/HISTORY.md](docs/HISTORY.md).
 
 ## Build
 
@@ -192,4 +189,4 @@ Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · protocol:
 ## Attribution
 
 Architecture and several implementation patterns are derived from
-[`MIUI-Fine-Tune`](MIUI-Fine-Tune (reference architecture; optional)) (Apache-2.0). See `NOTICE`.
+MiFineTune (reference architecture; local only, not bundled) (Apache-2.0). See `NOTICE`.
