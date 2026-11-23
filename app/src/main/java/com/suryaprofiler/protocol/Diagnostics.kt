@@ -111,6 +111,9 @@ data class DiagInfo(
     val baseProfile: String,
     /** Newest MIUI thermal events (read-only). */
     val thermalEvents: List<ThermalEvent> = emptyList(),
+    /** REA 2026-11-23: PowerKeeper's −2 °C SP-game virtual-sensor
+     *  compensation is likely active for [foreground] (null = unknown fg). */
+    val miuiSpGame: Boolean? = null,
 )
 
 object DiagnosticsParse {
@@ -202,6 +205,7 @@ object DiagnosticsParse {
             configDynamic = cfg.optBoolean("dynamic"),
             baseProfile = cfg.optString("base_profile", "?"),
             thermalEvents = thermalEvents(d),
+            miuiSpGame = d.boolOrNull("miui_sp_game"),
         )
     }
 

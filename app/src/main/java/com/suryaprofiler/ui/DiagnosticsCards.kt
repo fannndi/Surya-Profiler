@@ -137,6 +137,14 @@ internal fun ThermalCard(env: EnvSnapshot?, diag: DiagInfo?) {
             "temp ${env.thermalTempState ?: "—"} · screen ${env.thermalScreenState ?: "—"}",
         )
         KV("Quiet / NVM", "${fmtTemp(env.quietTempC)} · ${fmtTemp(env.nvmTempC)}")
+        if (diag?.miuiSpGame == true) {
+            Text(
+                "MIUI SP-game compensation likely active (−2 °C virtual sensor) — " +
+                    "quiet/board temps read low.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+        }
         KV("CPU6 cooling", fmtCooling(env.cpu6Cooling, env.cpu6CoolingMax))
         KV("CPU7 cooling", fmtCooling(env.cpu7Cooling, env.cpu7CoolingMax))
         KV("Policy max", "L ${fmtMhz(env.littleMaxMhz)} · B ${fmtMhz(env.bigMaxMhz)}")

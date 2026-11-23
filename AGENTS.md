@@ -10,6 +10,7 @@ Read the R&D evidence before changing the engine/catalog:
 - `research/RUNTIME-BEHAVIOR.md`
 - `research/CATALOG-STATUS.md`
 - `research/PROFILE-DESIGN.md`
+- `research/REA-2026-11-23.md`
 
 ## Architecture in one paragraph
 

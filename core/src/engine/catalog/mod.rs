@@ -220,6 +220,9 @@ mod tests {
         assert!(
             guard_path("/sys/devices/platform/soc/1d84000.ufshc/hibern8_on_idle_enable").is_err()
         );
+        // REA 2026-11-23: perf HAL uclamp hint surface (commonresourceconfigs).
+        assert!(guard_path("/dev/cpuctl/top-app/cpu.uclamp.min").is_err());
+        assert!(guard_path("/dev/cpuctl/cpu.notify_on_migrate").is_err());
     }
 
     #[test]

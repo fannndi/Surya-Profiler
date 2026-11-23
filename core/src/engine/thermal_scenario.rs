@@ -1,15 +1,18 @@
 //! MIUI thermal scenario IDs — decoded from `com.miui.powerkeeper`.
 //!
 //! `ThermalSwitchHandler` writes `/sys/class/thermal/thermal_message/sconfig`
-//! with a base scenario ID (0–25) plus optional offsets:
+//! with a base scenario ID (0–24) plus optional offsets:
 //!
-//! | Offset | Meaning |
+//! | Offset | Meaning (REA-confirmed 2026-11-23, smali `writeThermalId`) |
 //! |---:|---|
-//! | `+30` | power-mode performance |
-//! | `+100` | foreground/display not folded |
-//! | `+200` | IEC-All48 mode |
-//! | `+500` | IEC monitor mode |
+//! | `+30` | performance mode (`mPowerModeEnable && mIsPerformance`) |
+//! | `+100` | display unfolded (`!mIsDisplayFolded`) |
+//! | `+200` | IEC-All48 allowed, monitor not allowed |
+//! | `+500` | IEC monitor mode (test handler) |
 //!
+//! The handler rejects any base `>= 25` (writes 0–24 only) and skips the
+//! write when the resolved ID is unchanged — matching `mi_thermald`'s own
+//! change-only select. Game intents fire for base IDs 9/13/16/20/23.
 //! The IDs below are the constants in the ROM's PowerKeeper APK. Keeping this
 //! table in the engine lets the daemon and the UI speak MIUI's language while
 //! the private SuryaProfiler indices stay far away (60–63).
@@ -39,6 +42,8 @@ const OFF_IEC_MONITOR: i32 = 500;
 /// These names come from `ThermalSwitchHandler` in PowerKeeper 4.2.00
 /// (`THERMAL_ID_*` constants), not from the stock config map: several IDs
 /// intentionally have no vendor config and fall back to normal.
+/// `25` is kept for table completeness; REA 2026-11-23 confirmed the
+/// handler rejects it, so it never appears on the node.
 pub fn base_name(base: i32) -> Option<&'static str> {
     Some(match base {
         0 => "default",
@@ -73,8 +78,12 @@ pub fn base_name(base: i32) -> Option<&'static str> {
 
 /// Decodes a raw `sconfig` value. Unknown values keep `base = raw` and
 /// `known = false`; callers must treat them as MIUI-owned but unclassified.
+///
+/// REA 2026-11-23: `writeThermalId` rejects `id >= 25` outright, so base
+/// 25 never reaches the node from PowerKeeper on this build — `sconfig=25`
+/// decodes as unknown here, and 60–63 stay SuryaProfiler-owned.
 pub fn decode(raw: i32) -> MiuiScenario {
-    if (0..=25).contains(&raw) {
+    if (0..=24).contains(&raw) {
         return MiuiScenario {
             raw,
             base: raw,
@@ -103,7 +112,7 @@ pub fn decode(raw: i32) -> MiuiScenario {
             sum += OFF_IEC_MONITOR;
         }
         let base = raw - sum;
-        if (0..=25).contains(&base) {
+        if (0..=24).contains(&base) {
             return MiuiScenario {
                 raw,
                 base,
@@ -155,6 +164,28 @@ pub fn label(raw: i32) -> String {
     out
 }
 
+/// MIUI "special game" packages whose **virtual-sensor compensation** is
+/// applied by PowerKeeper while they are foreground (`mEnableSpOnVirtual
+/// SensorComp && mSpeedModeStatus == 1` → message 12).
+///
+/// REA 2026-11-23 (`ThermalSwitchHandler.DEFAULT_SP_ON_SPECIAL_GAME_VIRTUAL
+/// _SENSOR_COMPENSATION = -2000`, i.e. −2 °C): MIUI subtracts this from the
+/// virtual sensor reading during these games, so `quiet-therm-adc` /
+/// `board_sensor_temp` telemetry reads *lower* than the real skin temp.
+/// Diagnostics surface this flag so the numbers are not over-trusted.
+pub const SP_GAME_PACKAGES: &[&str] = &[
+    "com.miHoYo.ys.mi",
+    "com.tencent.tmgp.sgame",
+    "com.miHoYo.ys.bilibili",
+    "com.miHoYo.Yuanshen",
+    "com.miHoYo.GenshinImpact",
+];
+
+/// True when `pkg` gets MIUI's virtual-sensor compensation.
+pub fn is_miui_sp_game(pkg: &str) -> bool {
+    SP_GAME_PACKAGES.contains(&pkg)
+}
+
 /// MIUI scenarios SuryaProfiler must yield to. The user selected
 /// "keep custom" for video/game/benchmark, so those stay under the active
 /// Device Profile.
@@ -192,95 +223,4 @@ pub fn has_vendor_map_entry(raw: i32) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn decodes_base_ids() {
-        assert_eq!(decode(0).base, 0);
-        assert_eq!(decode(12).base, 12);
-        assert_eq!(decode(21).base, 21);
-        assert_eq!(base_name(21), Some("video"));
-        assert_eq!(base_name(17), Some("camera-4k"));
-        assert_eq!(base_name(99), None);
-        assert!(!decode(99).known);
-    }
-
-    #[test]
-    fn decodes_offsets() {
-        let s = decode(121);
-        assert!(s.known);
-        assert_eq!(s.base, 21);
-        assert!(s.foreground);
-        assert!(!s.performance);
-
-        let s = decode(151); // 21 + 100 + 30
-        assert_eq!(s.base, 21);
-        assert!(s.foreground && s.performance);
-
-        let s = decode(130); // default + foreground + performance
-        assert_eq!(s.base, 0);
-        assert!(s.foreground && s.performance);
-
-        let s = decode(521); // game-normal + IEC monitor
-        assert_eq!(s.base, 21);
-        assert!(s.iec_monitor);
-
-        let s = decode(620); // 500 + 100 + game-normal
-        assert_eq!(s.base, 20);
-        assert!(s.iec_monitor && s.foreground);
-    }
-
-    #[test]
-    fn rejects_impossible_combinations() {
-        assert!(!decode(26).known);
-        for v in 60..=63 {
-            assert!(!decode(v).known, "{v} belongs to SuryaProfiler");
-        }
-        assert!(!decode(999).known);
-        assert_eq!(label(999), "unknown(999)");
-    }
-
-    #[test]
-    fn labels_are_readable() {
-        assert_eq!(label(0), "default");
-        assert_eq!(label(12), "camera");
-        assert_eq!(label(121), "video + foreground");
-        assert_eq!(label(130), "default + foreground + performance");
-    }
-
-    #[test]
-    fn yield_policy_matches_the_user_choice() {
-        for v in [8, 12, 15, 17, 18, 112, 130, 131, 151] {
-            assert!(is_yield(v), "{v} must yield");
-        }
-        for v in [
-            0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 13, 14, 16, 19, 20, 21, 22, 23, 24, 25, 70, 101, 999,
-        ] {
-            assert!(!is_yield(v), "{v} must keep custom");
-        }
-        assert!(
-            !is_yield(1),
-            "base 1 alone is stale when performance mode is off"
-        );
-    }
-
-    #[test]
-    fn default_detection_handles_foreground_offset() {
-        assert!(is_default(0));
-        assert!(is_default(100));
-        assert!(!is_default(130), "performance mode is an override");
-        assert!(!is_default(300), "IEC is not default");
-        assert!(!is_default(21));
-    }
-
-    #[test]
-    fn vendor_map_ids_are_the_stock_subset() {
-        for v in [0, 1, 2, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] {
-            assert!(has_vendor_map_entry(v), "{v}");
-        }
-        for v in [20, 21, 70] {
-            assert!(!has_vendor_map_entry(v), "{v}");
-        }
-    }
-}
+mod tests;

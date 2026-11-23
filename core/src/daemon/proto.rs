@@ -163,6 +163,11 @@ pub struct DiagInfo {
     /// Newest MIUI `mi_thermald` events (read-only; diagnostic only).
     #[serde(default)]
     pub thermal_events: Vec<crate::engine::thermal_log::ThermalEvent>,
+    /// REA 2026-11-23: PowerKeeper applies a −2 °C virtual-sensor
+    /// compensation while one of the SP-game packages is foreground —
+    /// `Some(true)`/`Some(false)` only when a foreground package is known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub miui_sp_game: Option<bool>,
 }
 
 // --- emission ---------------------------------------------------------------

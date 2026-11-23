@@ -305,6 +305,9 @@ fn daemon_diag_stats_and_env_events() {
     assert!(diag["diag"]["watchers"]["fg"].is_boolean());
     assert_eq!(diag["diag"]["holds"]["saver_held"], false);
     assert_eq!(diag["diag"]["holds"]["input_suspend_held"], false);
+    // REA 2026-11-23: WhatsApp is not a PowerKeeper SP-game package, so the
+    // virtual-sensor compensation flag must be an explicit false.
+    assert_eq!(diag["diag"]["miui_sp_game"], false);
 
     d.send(json!({"cmd":"stats"}));
     let stats = d.wait_for(|v| v["event"] == "stats", Duration::from_secs(5));

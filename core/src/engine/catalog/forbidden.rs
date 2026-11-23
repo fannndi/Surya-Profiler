@@ -26,6 +26,11 @@ pub const FORBIDDEN_PREFIXES: &[&str] = &[
     "/sys/module/msm_performance",
     "/sys/module/cpu_boost",
     "/sys/devices/system/cpu/sched_static_cpu_pwr_cost",
+    // perf HAL uclamp hint surface (commonresourceconfigs.xml 2026-11-23:
+    // `top-app/foreground cpu.uclamp.latency_sensitive`, `top-app
+    // cpu.uclamp.min`, `cpu.notify_on_migrate` are written on every boost
+    // hint). Not cataloged — cgroup-v2 cpuctl stays framework-owned.
+    "/dev/cpuctl",
     // thermal (mi_thermald, thermal HAL, cooling devices)
     "/sys/class/thermal",
     "/data/vendor/thermal",

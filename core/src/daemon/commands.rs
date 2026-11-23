@@ -169,6 +169,10 @@ impl Runtime {
                         &crate::engine::env::default_root(),
                         12,
                     ),
+                    miui_sp_game: self
+                        .last_fg
+                        .as_deref()
+                        .map(crate::engine::thermal_scenario::is_miui_sp_game),
                 };
                 self.publisher.emit_reliable(&Event::Diag {
                     diag: Box::new(diag),
