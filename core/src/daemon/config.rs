@@ -58,6 +58,15 @@ pub struct DaemonConfig {
     /// service is on. Captured/restored through the bridge holds.
     #[serde(default)]
     pub rnd_input_suspend: bool,
+    /// Freq floor audit: re-assert the active profile's CPU floor when an
+    /// external writer keeps `scaling_min_freq` high with no activity
+    /// (default on; yields to MIUI performance mode, backs off when a
+    /// re-assert does not stick).
+    #[serde(default = "default_true")]
+    pub freq_floor_audit: bool,
+    /// Daemon log level (`error|warn|info|debug`); None = env/default.
+    #[serde(default)]
+    pub log_level: Option<String>,
 }
 
 fn default_schema() -> u32 {
@@ -74,6 +83,8 @@ impl Default for DaemonConfig {
             base_profile: default_base(),
             app_map: BTreeMap::new(),
             rnd_input_suspend: false,
+            freq_floor_audit: true,
+            log_level: None,
         }
     }
 }
@@ -87,6 +98,7 @@ impl DaemonConfig {
             enabled: false,
             dynamic: false,
             custom_thermal: false,
+            freq_floor_audit: false,
             ..DaemonConfig::default()
         }
     }

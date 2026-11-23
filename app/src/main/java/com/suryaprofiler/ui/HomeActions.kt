@@ -129,6 +129,11 @@ internal fun HomeViewModel.onCustomThermal(v: Boolean) {
     viewModelScope.launch(Dispatchers.IO) { config.customThermal = v }
 }
 
+/** Freq floor audit sentinel: pure config write, daemon picks it up. */
+internal fun HomeViewModel.onFreqFloorAudit(v: Boolean) {
+    viewModelScope.launch(Dispatchers.IO) { config.freqFloorAudit = v }
+}
+
 /** R&D switch: daemon-owned, auto-released on Service OFF. */
 internal fun HomeViewModel.onRndInputSuspend(v: Boolean) {
     if (!_state.value.serviceRunning) return

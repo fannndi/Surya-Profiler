@@ -45,6 +45,12 @@ Hal yang belum cukup bukti dan perlu diputuskan sebelum implementasi final.
   hanya menampilkan status?
 - Untuk sekarang: jangan menulis `msm_performance`/power mode. Profil hanya
   bekerja di dalam floor.
+- **Update 2026-11-24:** model floor diperbarui — pin screen-on MIUI itu
+  overlay berbatas (wake ~10 s, launch ~40 s; MIUI memulihkan floor
+  sebelumnya saat release). Yang belum teridentifikasi: komponen persis
+  yang menulis pin 1248000/979200 (perfd via PowerKeeper kemungkinan
+  besar) — audit 0.8.0 mencatatnya di log, dan sentinel menegakkan floor
+  hanya saat screen-off.
 
 ## 4. Refresh helper — removed from scope (2026-11-20)
 

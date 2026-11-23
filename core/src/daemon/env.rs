@@ -30,7 +30,7 @@ pub fn spawn(tx: Sender<Msg>) {
         .name("env".into())
         .spawn(move || loop {
             let snap: EnvSnapshot = sampler.sample();
-            if tx.send(Msg::Env(snap)).is_err() {
+            if tx.send(Msg::Env(Box::new(snap))).is_err() {
                 break; // main loop gone — process is shutting down
             }
             std::thread::sleep(cadence);

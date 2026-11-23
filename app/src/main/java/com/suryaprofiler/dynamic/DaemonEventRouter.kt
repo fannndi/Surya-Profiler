@@ -73,7 +73,12 @@ class DaemonEventRouter(
             is DaemonEvent.Env -> DynamicProfileState.env.value = event.env
 
             is DaemonEvent.Diag -> {
-                event.diag?.let { DynamicProfileState.diag.value = it }
+                event.diag?.let {
+                    DynamicProfileState.diag.value = it
+                    // Seed the log view from the daemon's durable ring when
+                    // the in-app relay has nothing yet.
+                    DynamicProfileState.seedLogs(it.recentLogs)
+                }
                 // The 30 s env cadence can be stale when Diagnostics opens;
                 // the diag reply carries a fresh sample, so mirror it.
                 event.env?.let { DynamicProfileState.env.value = it }

@@ -13,6 +13,8 @@ class ConfigCodecTest {
         assertTrue(cfg.enabled)
         assertTrue(cfg.dynamic)
         assertTrue(cfg.customThermal)
+        assertTrue(cfg.freqFloorAudit)
+        assertEquals(null, cfg.logLevel)
         assertEquals(ProfileId.BALANCE, cfg.baseProfile)
         assertFalse(cfg.restorePending)
     }
@@ -48,11 +50,21 @@ class ConfigCodecTest {
             appMap = mapOf("com.p" to ProfileId.POWERSAVE),
             rndInputSuspend = false,
             restorePending = true,
+            freqFloorAudit = false,
+            logLevel = "debug",
         )
         val json = ConfigCodec.encode(cfg)
         assertEquals(ConfigCodec.SCHEMA, json.getInt("schema"))
         assertEquals(ProfileId.GAME, ConfigCodec.decode(json).baseProfile)
         assertTrue(ConfigCodec.decode(json).restorePending)
+        assertFalse(ConfigCodec.decode(json).freqFloorAudit)
+        assertEquals("debug", ConfigCodec.decode(json).logLevel)
         assertEquals("powersave", json.getJSONObject("app_map").getString("com.p"))
+    }
+
+    @Test fun omitsNullLogLevelOnWrite() {
+        val json = ConfigCodec.encode(AppConfig())
+        assertFalse("null log level must not become a string", json.has("log_level"))
+        assertTrue(json.getBoolean("freq_floor_audit"))
     }
 }

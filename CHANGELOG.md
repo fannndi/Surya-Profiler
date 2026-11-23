@@ -4,6 +4,47 @@
 > (`EVIDENCE-DEVICE`, `EVIDENCE-THERMAL`, `HISTORY`, `OPEN-QUESTIONS`);
 > older entries below still name the original paths.
 
+## 0.8.0 — 2026-11-24 (freq floor audit + observability)
+
+- **Freq floor audit sentinel (default ON, screen-off scope).** Reports of
+  an idle CPU pinned at a high frequency traced back to
+  `scaling_min_freq`: the profiles write the floor low, so a high floor
+  means an external writer. Device measurement (2026-11-24) settled the
+  model: MIUI's screen-on floor is a bounded overlay (wake ~10 s, app
+  launch ~40 s) that releases on its own — fighting it on screen would
+  cut legitimate boosts. So the audit acts only while the screen is
+  OFF (no interaction is possible there): a floor above the active
+  sleep profile for >30 s is logged with full context and re-asserted
+  through the normal forced apply (closing the real gap: in-place
+  applies skip drift and the watchdog only runs every 30 min). Yields
+  to MIUI performance mode; a non-sticking re-assert backs off
+  (30 s→300 s cap) and reports "external floor holder suspected".
+  Screen-on drift is logged once per episode, never fought. Heals flow
+  into the auto-revive stats.
+- **Levelled logging infra** (`core/src/logging.rs`): ring buffer (512
+  lines) + rotating file sink (`<state_dir>/logs/daemon.log`, 512 KB,
+  one generation) + stderr mirror for the app's logcat relay. Levels via
+  `SURYAPROFILER_LOG` and the config `log_level` (applied live on
+  reload); components tag every line (`daemon`, `apply`, `floor`, ...).
+  New diagnostics: worker per-key failures (`apply` at debug/warn).
+- **`diag` gains `recent_logs`** (~120 newest lines) — the app seeds its
+  Diagnostics log view from the durable ring. Settings gains a
+  "Freq floor audit" switch (ConfigCodec schema-2 additive keys:
+  `freq_floor_audit`, `log_level`).
+- **CLI:** `surya-prof log [--last N] [--level L] [--follow]` (durable
+  log tail) and `surya-prof debug env` (read-only live freq/thermal
+  report: live vs profile floors, stock values, governors, thermal
+  mode — the one-shot "why is my CPU frequency high" answer).
+- Sampler: `EnvSnapshot` gains `little/big_min_mhz` (the floor was
+  invisible before) and the active governors.
+- Host tests: floor-audit E2E (sleep drift → heal → stats; screen-on
+  drift noted, never fought), logging rotation/filtering, freq-audit
+  state machine unit tests, `recent_logs` in diag.
+- Device E2E (surya): injected a stuck sleep floor (1017600/979200) —
+  healed in ~40 s with the full log story; `log`/`debug env` verified
+  on device; force-stop → stock restore (36 keys, 0 failed).
+  Evidence: `docs/HISTORY.md` (2026-11-24).
+
 ## 0.7.2 — 2026-11-24 (REA ownership map)
 
 - Reverse-engineered the shipped MIUI/QTI components with REA (Ghidra for

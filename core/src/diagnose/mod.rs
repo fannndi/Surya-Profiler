@@ -262,6 +262,7 @@ pub fn run(state_dir: &Path, config_path: Option<&Path>, fix_thermal: bool) -> (
 }
 
 mod battery;
+mod debug_env;
 mod env_checks;
 mod miui;
 mod thermal_checks;
@@ -271,4 +272,5 @@ mod thermal_files;
 mod tests;
 
 pub(crate) use battery::{battery_service_check, dumpsys_bin};
+pub use debug_env::debug_env;
 pub(crate) use miui::{background_appops_check, battery_whitelist_check, millet_frozen_check};

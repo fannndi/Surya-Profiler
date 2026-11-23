@@ -75,6 +75,18 @@ fn fake_tree(tag: &str) -> PathBuf {
         "sys/devices/system/cpu/cpufreq/policy6/scaling_max_freq",
         "1209600\n",
     );
+    w(
+        "sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq",
+        "1612800\n",
+    );
+    w(
+        "sys/devices/system/cpu/cpufreq/policy6/scaling_min_freq",
+        "1843200\n",
+    );
+    w(
+        "sys/devices/system/cpu/cpufreq/policy0/scaling_governor",
+        "schedutil\n",
+    );
     root
 }
 
@@ -197,6 +209,10 @@ fn sampler_reads_a_fake_tree() {
     assert_eq!(s.cpu7_cooling_max, Some(14));
     assert_eq!(s.little_max_mhz, Some(1708));
     assert_eq!(s.big_max_mhz, Some(1209));
+    assert_eq!(s.little_min_mhz, Some(1612), "the MIUI screen-on floor");
+    assert_eq!(s.big_min_mhz, Some(1843));
+    assert_eq!(s.little_governor.as_deref(), Some("schedutil"));
+    assert_eq!(s.big_governor, None, "absent node stays absent");
     let _ = fs::remove_dir_all(&root);
 }
 

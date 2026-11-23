@@ -24,6 +24,12 @@ struct Args {
     config: Option<PathBuf>,
     /// `doctor` only: remove foreign thermal ships after the scan.
     fix_thermal: bool,
+    /// `log` only: print the last N lines (default all).
+    last: Option<usize>,
+    /// `log` only: keep tailing the file.
+    follow: bool,
+    /// `log` only: minimum level to print.
+    level: Option<String>,
 }
 
 fn parse_args(argv: &[String]) -> Result<Args, String> {
@@ -33,6 +39,9 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
     let mut profiles: Option<PathBuf> = None;
     let mut config: Option<PathBuf> = None;
     let mut fix_thermal = false;
+    let mut last: Option<usize> = None;
+    let mut follow = false;
+    let mut level: Option<String> = None;
     let mut i = 0;
     while i < argv.len() {
         let a = &argv[i];
@@ -54,6 +63,17 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
                 config = Some(PathBuf::from(v));
             }
             "--fix-thermal" => fix_thermal = true,
+            "--last" => {
+                i += 1;
+                let v = argv.get(i).ok_or("--last needs a value")?;
+                last = Some(v.parse().map_err(|_| "--last needs a number")?);
+            }
+            "--follow" => follow = true,
+            "--level" => {
+                i += 1;
+                let v = argv.get(i).ok_or("--level needs a value")?;
+                level = Some(v.clone());
+            }
             "--help" | "-h" => {
                 return Err(String::new()); // usage, not an error
             }
@@ -77,6 +97,9 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
         profiles,
         config,
         fix_thermal,
+        last,
+        follow,
+        level,
     })
 }
 
@@ -91,6 +114,9 @@ commands:
   clean                 release saver/input-suspend/thermal holds (root)
   verify <id>           check live values vs profile, detect drift
   status                active profile, snapshot, framework evidence
+  debug env             read-only live freq/thermal report (floor drift)
+  log [--last N] [--follow] [--level debug]
+                        daemon log file (read-only)
   serve                 stdio daemon (JSON-lines on stdin/stdout)
   doctor [--fix-thermal]
                         environment self-check; --fix-thermal also removes
@@ -128,6 +154,90 @@ fn require_root() -> Result<(), String> {
 
 mod commands;
 
+/// `surya-prof log [--last N] [--follow] [--level debug]` — print the
+/// daemon's log file (read-only; the newest rotation `.log.1` first).
+fn run_log(args: &Args) -> ExitCode {
+    use std::io::BufRead;
+    let min_level = args
+        .level
+        .as_deref()
+        .and_then(surya_profiler_core::logging::parse_level);
+    let keep = |line: &str| -> bool {
+        match min_level {
+            // line format: `<date> <time> <tag> [component] message`
+            Some(l) => line
+                .split_whitespace()
+                .nth(2)
+                .and_then(|t| t.chars().next())
+                .map(|tag| match tag {
+                    'E' => surya_profiler_core::logging::Level::Error,
+                    'W' => surya_profiler_core::logging::Level::Warn,
+                    'D' => surya_profiler_core::logging::Level::Debug,
+                    _ => surya_profiler_core::logging::Level::Info,
+                })
+                .is_some_and(|lv| lv <= l),
+            None => true,
+        }
+    };
+    let print_all = |lines: Vec<String>| -> usize {
+        let kept: Vec<&String> = lines.iter().filter(|l| keep(l)).collect();
+        let skip = kept.len().saturating_sub(args.last.unwrap_or(usize::MAX));
+        for l in &kept[skip..] {
+            println!("{l}");
+        }
+        kept.len() - skip
+    };
+    let mut files = vec![
+        surya_profiler_core::logging::log_path(&args.state_dir),
+        surya_profiler_core::logging::log_path(&args.state_dir).with_extension("log.1"),
+    ];
+    files.reverse(); // oldest generation first
+    let mut shown = 0usize;
+    for f in &files {
+        if let Ok(fh) = std::fs::File::open(f) {
+            shown = print_all(
+                std::io::BufReader::new(fh)
+                    .lines()
+                    .map_while(Result::ok)
+                    .collect(),
+            );
+        }
+    }
+    if shown == 0 {
+        eprintln!(
+            "no log yet at {} (the daemon writes it while the service runs)",
+            surya_profiler_core::logging::log_path(&args.state_dir).display()
+        );
+        return ExitCode::from(1);
+    }
+    if args.follow {
+        let path = surya_profiler_core::logging::log_path(&args.state_dir);
+        let mut pos = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let Ok(fh) = std::fs::File::open(&path) else {
+                continue;
+            };
+            let len = fh.metadata().map(|m| m.len()).unwrap_or(0);
+            if len < pos {
+                pos = 0; // rotated
+            }
+            use std::io::{Seek, SeekFrom};
+            let mut fh = fh;
+            if fh.seek(SeekFrom::Start(pos)).is_err() {
+                continue;
+            }
+            let mut delta = String::new();
+            let read = std::io::Read::read_to_string(&mut fh, &mut delta).unwrap_or(0);
+            pos += read as u64;
+            for l in delta.lines().filter(|l| keep(l)) {
+                println!("{l}");
+            }
+        }
+    }
+    ExitCode::SUCCESS
+}
+
 pub fn main() -> ExitCode {
     let argv: Vec<String> = std::env::args().skip(1).collect();
     if argv.iter().any(|a| a == "--version" || a == "-V") {
@@ -161,6 +271,10 @@ pub fn main() -> ExitCode {
                     ExitCode::from(1)
                 }
             }
+        }
+        "log" => {
+            // human text output (not JSON): tail/follow the daemon log file
+            run_log(&args)
         }
         _ => match commands::run(&args) {
             Ok((code, payload)) => {

@@ -84,6 +84,16 @@ object DynamicProfileState {
         logs.value = emptyList()
     }
 
+    /**
+     * Seeds the log view from the daemon's durable ring (`diag.recent_logs`)
+     * so the view is never empty just because the stderr relay started late.
+     * A non-empty live capture always wins (single time source).
+     */
+    fun seedLogs(lines: List<String>) {
+        if (lines.isEmpty() || logs.value.isNotEmpty()) return
+        logs.value = lines.takeLast(200)
+    }
+
     /** Latest `applied` event (each event is a new instance). */
     val appliedEvents = MutableStateFlow<AppliedEvent?>(null)
     private val appliedSeq = AtomicLong(0)

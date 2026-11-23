@@ -308,6 +308,14 @@ fn daemon_diag_stats_and_env_events() {
     // REA 2026-11-23: WhatsApp is not a PowerKeeper SP-game package, so the
     // virtual-sensor compensation flag must be an explicit false.
     assert_eq!(diag["diag"]["miui_sp_game"], false);
+    // the daemon's ring buffer must reach the app through the diag reply
+    let logs = diag["diag"]["recent_logs"].as_array().expect("recent_logs");
+    assert!(!logs.is_empty(), "diag must carry recent daemon log lines");
+    assert!(
+        logs.iter()
+            .any(|l| l.as_str().unwrap_or("").contains("evaluate")),
+        "log lines must include decision chatter: {logs:?}"
+    );
 
     d.send(json!({"cmd":"stats"}));
     let stats = d.wait_for(|v| v["event"] == "stats", Duration::from_secs(5));
@@ -842,6 +850,113 @@ fn watchdog_and_force_apply_reconcile_every_profile_key() {
     );
     assert!(st["heals_last_keys"].as_u64().unwrap_or(0) >= 1);
     d.send(serde_json::json!({"cmd": "shutdown"}));
+    d.wait_for(|v| v["event"] == "bye", Duration::from_secs(5));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn freq_floor_audit_reasserts_a_stuck_sleep_floor() {
+    // The sentinel enforces the floor while the screen is OFF (no
+    // interaction is possible there, so a high floor is genuinely wrong).
+    // On screen-on MIUI holds a bounded floor overlay — logged, never
+    // fought. The watchdog is disabled to prove the audit drives the fix.
+    let dir = tmp("floor-audit");
+    let cfg_path = dir.join("config.json");
+    std::fs::write(
+        &cfg_path,
+        r#"{"schema":2,"enabled":true,"dynamic":true,"freq_floor_audit":true,
+            "base_profile":"balance"}"#,
+    )
+    .unwrap();
+    let root = reconciled_tree(&dir);
+    let sysfs_root = root.to_str().unwrap().to_owned();
+    let envs: Vec<(&str, &str)> = vec![
+        ("SURYAPROFILER_SYSFS_ROOT", &sysfs_root),
+        ("SURYAPROFILER_WATCHDOG_SECS", "0"),
+        ("SURYAPROFILER_AUDIT_INTERVAL_MS", "200"),
+        ("SURYAPROFILER_AUDIT_GRACE_MS", "300"),
+        ("SURYAPROFILER_ENV_SAMPLE_MS", "1000"),
+    ];
+    let mut d = Daemon::spawn_env(&dir, &cfg_path, &envs);
+    d.send(json!({"cmd": "hello"}));
+    d.wait_for(|v| v["event"] == "hello", Duration::from_secs(5));
+    d.send(json!({"cmd": "screen", "on": true, "locked": false}));
+    d.send(json!({"cmd": "fg", "pkg": "app.balance"}));
+    d.wait_for(
+        |v| v["event"] == "applied" && v["profile"] == "balance" && v["ok"] == true,
+        Duration::from_secs(10),
+    );
+
+    // screen-off drift: MIUI/foreign tuner pins the little floor high
+    d.send(json!({"cmd": "screen", "on": false, "locked": true}));
+    d.wait_for(
+        |v| v["event"] == "applied" && v["profile"] == "sleep",
+        Duration::from_secs(16),
+    );
+    std::fs::write(
+        root.join("sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq"),
+        "1612800\n",
+    )
+    .unwrap();
+
+    // the audit must re-assert the sleep floor within its grace
+    d.wait_for(
+        |v| {
+            v["event"] == "applied"
+                && v["profile"] == "sleep"
+                && v["wrote"].as_u64().unwrap_or(0) >= 1
+        },
+        Duration::from_secs(15),
+    );
+    assert_eq!(
+        read_tree_node(
+            &root,
+            "sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq"
+        ),
+        "576000",
+        "freq audit must heal the stuck sleep floor"
+    );
+    wait_log(
+        &dir.join("daemon-stderr.log"),
+        "floor audit: re-asserting the sleep floor",
+        Duration::from_secs(5),
+    );
+
+    // the heal counts in stats
+    d.send(json!({"cmd": "stats"}));
+    let st = d.wait_for(|v| v["event"] == "stats", Duration::from_secs(5));
+    assert!(
+        st["heals_total"].as_u64().unwrap_or(0) >= 1,
+        "an audit heal must be counted: {st:?}"
+    );
+
+    // screen-on drift: MIUI's bounded overlay — noted once, never fought
+    d.send(json!({"cmd": "screen", "on": true, "locked": false}));
+    d.wait_for(
+        |v| v["event"] == "applied" && v["profile"] == "balance",
+        Duration::from_secs(10),
+    );
+    std::fs::write(
+        root.join("sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq"),
+        "1612800\n",
+    )
+    .unwrap();
+    wait_log(
+        &dir.join("daemon-stderr.log"),
+        "MIUI holds the screen-on CPU floor",
+        Duration::from_secs(5),
+    );
+    std::thread::sleep(Duration::from_millis(2000));
+    assert_eq!(
+        read_tree_node(
+            &root,
+            "sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq"
+        ),
+        "1612800",
+        "the audit must not fight MIUI's screen-on floor overlay"
+    );
+
+    d.send(json!({"cmd": "shutdown"}));
     d.wait_for(|v| v["event"] == "bye", Duration::from_secs(5));
     let _ = std::fs::remove_dir_all(&dir);
 }

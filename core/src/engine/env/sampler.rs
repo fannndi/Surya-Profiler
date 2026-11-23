@@ -110,6 +110,28 @@ impl Sampler {
                 "sys/devices/system/cpu/cpufreq/policy6/scaling_max_freq",
                 khz_to_mhz,
             ),
+            little_min_mhz: self.read_parse(
+                "sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq",
+                khz_to_mhz,
+            ),
+            big_min_mhz: self.read_parse(
+                "sys/devices/system/cpu/cpufreq/policy6/scaling_min_freq",
+                khz_to_mhz,
+            ),
+            little_governor: read_trim(
+                &self
+                    .root
+                    .join("sys/devices/system/cpu/cpufreq/policy0/scaling_governor"),
+            )
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
+            big_governor: read_trim(
+                &self
+                    .root
+                    .join("sys/devices/system/cpu/cpufreq/policy6/scaling_governor"),
+            )
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
         }
     }
 

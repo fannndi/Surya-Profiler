@@ -1324,3 +1324,50 @@ ke profil Game lewat `config.json` (`app_map`), diuji dengan daemon asli:
 
 Sesi ini juga menegaskan aturan 0.4.2 pada game nyata: keluar dari game
 termapan kembali ke base, dan profiler/launcher sendiri bukan transient.
+
+## 2026-11-24 — 0.8.0 freq floor audit + bukti perilaku floor MIUI
+
+### Konteks: laporan "CPU freq macet tinggi saat idle"
+
+Semua profil menulis `scaling_min_freq` rendah (576/652 kHz kHz-scale:
+576000/652800 kHz), jadi freq idle yang tinggi berarti *pihak lain* yang
+menahan floor. Sebelum 0.8.0 daemon buta terhadap `scaling_min_freq`
+(sampler tidak membacanya) dan hanya watchdog 30 menit yang menulis ulang.
+
+### Probe terkontrol (1 Hz, `scaling_min_freq` policy0/policy6 + sconfig)
+
+Wake tanpa unlock (`KEYCODE_WAKEUP`, tanpa sentuhan lain):
+
+```
+02:46:57 lmin=1248000 bmin=979200 sconfig=63   <- wake: MIUI pin overlay
+02:47:07 lmin=576000 bmin=652800 sconfig=63   <- +10 s: dilepas, kembali ke floor sleep kita
+02:47:08..02:48:25 stabil 576000/652800 (80 s screen-on-idle, TIDAK ada pin)
+```
+
+Sesi daemon (log 0.8.0 pertama): app launch (`am start`) menaikkan floor
+1248000/979200 selama **~44 s** (launch-boost MIUI, bukan interaksi),
+lepas sendiri; audit re-assert pertama (grace 30 s, trigger
+`freq_audit`) healed 3 key; sleep apply menulis floor 576/652 dan tetap
+setelah screen-off. Kesimpulan:
+
+- **Floor screen-on MIUI adalah overlay berbatas** (wake ~10 s, launch
+  ~40+ s) dan saat release MIUI mengembalikan nilai sebelumnya (floor
+  profil kita) — sistem harmonis tanpa perang tulis.
+- **Screen-off tidak ada pin** yang sah; floor tinggi saat sleep =
+  stuck hint / tuner asing — di sinilah sentinel bertindak.
+- Tindakan audit dibatasi screen-off; drift screen-on hanya dicatat
+  sekali per episode (`MIUI holds the screen-on CPU floor ... release
+  expected; not fighting it`), mematuhi hard rule 1.
+
+### E2E device 0.8.0 (pertama, log daemon nyata)
+
+| Step | Hasil |
+|---|---|
+| Deploy + service start | log file `/data/adb/suryaprofiler/logs/daemon.log` aktif (ring + file + stderr) |
+| Launch boost | audit: "MIUI holds the screen-on CPU floor 1248000/979200 kHz ... not fighting it" |
+| Grace 30 s (2 sampel @15 s) → re-assert | `evaluate(freq_audit)` → `auto-revive: healed 3 keys for balance` |
+| Screen off → sleep | sleep apply; floor 576/652; sconfig 63 |
+| force-stop | exit restore ok=true wrote=17 verified=17 failed=0, holds released |
+
+Catatan: audit versi pertama (sebelum revisi ini) sempat re-assert saat
+screen-on — eksperimen di atas yang mengoreksi desainnya.

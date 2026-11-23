@@ -4,9 +4,13 @@
 use super::*;
 
 mod exit;
+mod threads;
 
 /// Entry point for `surya-prof serve`.
 pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
+    // Logging before the first chatter: level from SURYAPROFILER_LOG, file
+    // sink under <state_dir>/logs/. The app's config may override below.
+    crate::logging::init(Some(state_dir), crate::logging::level_from_env());
     let publisher = Publisher::new();
     publisher.emit(&Event::Hello {
         version: VERSION,
@@ -35,6 +39,7 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
         publisher.log(&format!("config: {e}"));
     }
     cfg.reload_if_changed();
+    crate::logging::set_level_str(cfg.get().log_level.as_deref());
 
     let flags = LiveFlags::spawn();
     let bridge = Bridge::recover(state_dir, publisher.clone(), Some(flags.clone()));
@@ -67,83 +72,14 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
     let (work_tx, work_rx) = mpsc::channel::<Work>();
     let (sync_tx, sync_rx) = mpsc::channel::<SyncCtx>();
 
-    // --- stdin reader thread -------------------------------------------------
-    {
-        let tx = msg_tx.clone();
-        let pubr = publisher.clone();
-        std::thread::Builder::new()
-            .name("stdin".into())
-            .spawn(move || {
-                use std::io::BufRead;
-                let stdin = std::io::stdin();
-                for line in stdin.lock().lines() {
-                    let Ok(line) = line else { break };
-                    if line.trim().is_empty() {
-                        continue;
-                    }
-                    match serde_json::from_str::<Command>(&line) {
-                        Ok(cmd) => {
-                            if tx.send(Msg::Command(cmd)).is_err() {
-                                break;
-                            }
-                        }
-                        Err(e) => pubr.log(&format!("ipc: bad command: {e}")),
-                    }
-                }
-                let _ = tx.send(Msg::StdinClosed);
-            })
-            .map_err(|e| format!("stdin thread: {e}"))?;
-    }
-
-    // --- apply worker thread -------------------------------------------------
-    let worker_handle = {
-        let state_dir = state_dir.to_path_buf();
-        let bridge = bridge.clone();
-        let tx = msg_tx.clone();
-        std::thread::Builder::new()
-            .name("apply-worker".into())
-            .spawn(move || {
-                let mut engine = engine_driver::EngineApplier::new(&state_dir, bridge);
-                let mut on_applied = |ev: worker::AppliedEvent| {
-                    let _ = tx.send(Msg::Applied(ev));
-                };
-                let mut on_restored = |ev: RestoredEvent| {
-                    let _ = tx.send(Msg::Restored(ev));
-                };
-                let mut on_shutdown = |rep: worker::ShutdownReport| {
-                    let _ = tx.send(Msg::ShutdownDone(rep));
-                };
-                worker::run_with_shutdown(
-                    work_rx,
-                    &mut engine,
-                    Duration::from_millis(worker::settle_ms()),
-                    Duration::from_millis(worker::RETRY_MS),
-                    &mut on_applied,
-                    &mut on_restored,
-                    &mut on_shutdown,
-                );
-            })
-            .map_err(|e| format!("worker thread: {e}"))?
-    };
-
-    // --- bridge sync thread (settings IO; never blocks decisions) ------------
-    {
-        let bridge = bridge.clone();
-        std::thread::Builder::new()
-            .name("bridge".into())
-            .spawn(move || {
-                // latest wins: drain pending contexts before syncing, so a
-                // burst of decisions costs ONE settings read/write round.
-                while let Ok(first) = sync_rx.recv() {
-                    let mut latest = first;
-                    while let Ok(next) = sync_rx.try_recv() {
-                        latest = next;
-                    }
-                    bridge.sync(&latest);
-                }
-            })
-            .map_err(|e| format!("bridge thread: {e}"))?;
-    }
+    threads::spawn_stdin(msg_tx.clone(), publisher.clone())?;
+    let worker_handle = threads::spawn_worker(
+        state_dir.to_path_buf(),
+        bridge.clone(),
+        msg_tx.clone(),
+        work_rx,
+    )?;
+    threads::spawn_bridge(bridge.clone(), sync_rx)?;
 
     // --- main loop -------------------------------------------------------------
     let mut rt = Runtime {
@@ -162,6 +98,7 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
         stats: Stats::load(state_dir),
         reconciled: false,
         watchdog_tick: 0,
+        floor_audit: freq_audit::FloorAudit::new(),
         restoring: false,
         screen_on: true,
         locked: false,
@@ -222,7 +159,7 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
                 trigger,
                 started,
             }) => rt.on_seed(pkg, trigger, started),
-            Ok(Msg::Env(snap)) => rt.on_env(snap),
+            Ok(Msg::Env(snap)) => rt.on_env(*snap),
             Ok(Msg::WatcherDown) => {
                 rt.log("foreground stream ended");
             }
@@ -259,6 +196,7 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
             next_cfg = now + Duration::from_millis(CONFIG_POLL_MS);
             if rt.config.reload_if_changed() {
                 rt.log("config reloaded (mtime)");
+                crate::logging::set_level_str(rt.config.get().log_level.as_deref());
                 let fg =
                     arbiter::decision_foreground(rt.last_fg.as_deref(), rt.last_real.as_deref());
                 rt.evaluate("config", fg);

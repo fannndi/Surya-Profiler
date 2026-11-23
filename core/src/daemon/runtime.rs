@@ -56,7 +56,7 @@ impl Runtime {
         }
         self.env = snap;
         self.publisher.emit(&Event::Env {
-            env: self.env.clone(),
+            env: Box::new(self.env.clone()),
         });
     }
 
@@ -66,7 +66,7 @@ impl Runtime {
                 // Periodic confirmations are silent; a real switch writes.
             } else if ev.watchdog {
                 self.log(&format!(
-                    "watchdog: auto-revived {} keys for {}",
+                    "auto-revive: healed {} keys for {}",
                     ev.wrote, ev.profile
                 ));
                 self.stats.record_heal(ev.wrote);

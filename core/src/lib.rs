@@ -8,6 +8,7 @@
 //! - `engine/`   planning + apply/verify/restore (see engine/mod.rs)
 //! - `daemon/`   stdio daemon (JSON-lines; see daemon/mod.rs)
 //! - `diagnose/` read-only environment self-check (`doctor`)
+//! - `logging.rs` levelled ring/file logger (daemon + CLI)
 //!
 //! Ownership model (see `engine::catalog`): FREE + BOOT-BASELINE parameters
 //! only; runtime-framework nodes are rejected even if a profile names them.
@@ -15,6 +16,7 @@
 pub mod daemon;
 pub mod diagnose;
 pub mod engine;
+pub mod logging;
 pub mod platform;
 
 /// Default profile set, bundled in the binary and mirrored in assets.

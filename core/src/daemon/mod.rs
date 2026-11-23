@@ -27,6 +27,7 @@ mod config;
 mod engine_driver;
 mod env;
 mod evaluate;
+mod freq_audit;
 mod proto;
 mod runtime;
 mod settings;
@@ -42,6 +43,7 @@ pub use bridge::thermal_files_fix;
 pub use bridge::thermal_files_scan;
 pub use bridge::thermal_inspect;
 pub use bridge::ReleaseReport;
+pub use freq_audit::{desired_floors, live_floors};
 pub use proto::{Command, Event, Publisher, Snapshot, VERSION};
 
 /// Config shape shared with `doctor` (and future tools).
@@ -93,7 +95,7 @@ enum Msg {
         started: Instant,
     },
     /// Fresh environment sample (battery / thermal / GPU busy).
-    Env(EnvSnapshot),
+    Env(Box<EnvSnapshot>),
     /// The foreground watcher stream died; the supervisor restarts it.
     WatcherDown,
     /// Worker-owned exit cleanup finished.
@@ -126,6 +128,8 @@ struct Runtime {
     reconciled: bool,
     /// Auto-revive watchdog counter (3 s supervise ticks).
     watchdog_tick: u64,
+    /// Freq floor audit state (external floor drift detection).
+    floor_audit: freq_audit::FloorAudit,
     /// True from the service-off restore until exit/failed restore. Blocks
     /// decisions and bridge syncs so nothing re-tunes a restored device.
     restoring: bool,

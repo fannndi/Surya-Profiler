@@ -46,8 +46,10 @@ the catalog guard.
    `cpu_boost` parameter other than `input_boost_freq`. The live screen-on CPU
    floor (typically 1612800 little / 1843200 big) belongs to MIUI's power
    policy. It is **interaction-scoped**, not a constant screen state: a wake
-   boost lasts ~3 s and a touch blip ~1 s, while adb-driven sessions can run
-   floor-less. Always use the live `scaling_min_freq`, never a hardcoded floor.
+   boost lasts ~3–10 s and an app-launch boost ~40 s (measured 2026-11-24;
+   MIUI *restores the previous floor* on release), while adb-driven sessions
+   can run floor-less. Always use the live `scaling_min_freq`, never a
+   hardcoded floor.
 2. **Max ≥ floor** — a `scaling_max_freq` below the live `scaling_min_freq`
    is silently clamped by the kernel. The engine plans it as `Locked` and
    retries once after a transient boost decays; do not write a value that can
@@ -109,6 +111,7 @@ the catalog guard.
 | Path | Responsibility |
 |---|---|
 | `src/lib.rs` | module index + `DEFAULT_PROFILES_JSON` |
+| `src/logging.rs` | levelled logger: ring buffer + rotating file + stderr mirror |
 | `src/main.rs` | binary entry (delegates to `cli.rs`) |
 | `src/cli.rs` + `src/cli/commands.rs` | CLI: probe/profiles/plan/apply/restore/clean/verify/status/serve/doctor/thermal-clean/catalog |
 | `profiles.json` | 3 user profiles + hidden sleep |
@@ -126,12 +129,13 @@ the catalog guard.
 | `src/engine/readback.rs` | read-back rules + snapshot normalization |
 | `src/engine/apply/` | apply/restore/verify + atomic store |
 | `src/daemon/` | arbiter, worker, watchers, bridge, settings, env, stats |
+| `src/daemon/freq_audit.rs` | freq floor audit sentinel (external floor drift detection) |
 | `src/daemon/bridge/` | saver, R&D input-suspend, thermal takeover + holds |
 | `src/daemon/commands.rs` | command dispatch + foreground/peek plumbing |
 | `src/daemon/evaluate.rs` | decision point + 3 s supervisor |
 | `src/daemon/worker.rs` | coalescing apply worker |
 | `src/daemon/bridge/thermal/` | profile/paths/io/perf/map/install/select/sync/release/files |
-| `src/diagnose/` | `doctor` self-check (battery/miui/env/thermal/thermal-files) |
+| `src/diagnose/` | `doctor` self-check (battery/miui/env/thermal/thermal-files) + `debug env` |
 | `assets/thermal/` | plaintext balance/game/powersave/sleep configs (encrypted at runtime) |
 | `tests/` | host E2E: protocol, foreground watcher, multi-window probe |
 
@@ -210,12 +214,15 @@ Architecture: `docs/ARCHITECTURE.md`; protocol: `docs/PROTOCOL.md`; thermal:
 | `SURYAPROFILER_DUMPSYS_BIN` | `/system/bin/dumpsys` (peek + split probe) |
 | `SURYAPROFILER_SETTINGS_BIN` | `/system/bin/settings` (saver flag) |
 | `SURYAPROFILER_SYSFS_ROOT` | `/` (fake tree) |
+| `SURYAPROFILER_LOG` | daemon log level (default `info`; config `log_level` overrides live) |
 | `SURYAPROFILER_ENV_SAMPLE_MS` | 30 s sample cadence |
 | `SURYAPROFILER_WATCHDOG_SECS` | 1800 s reconcile cadence |
 | `SURYAPROFILER_SETTLE_MS` | 400 ms worker coalescing window |
 | `SURYAPROFILER_SLEEP_DELAY_MS` | 10 s screen-off grace |
 | `SURYAPROFILER_DEBOUNCE_MS` | 300 ms foreground debounce |
 | `SURYAPROFILER_FLOOR_RETRY_MS` | 3500 ms one-shot retry after a transient MIUI boost (`0` disables) |
+| `SURYAPROFILER_AUDIT_INTERVAL_MS` | 15000 ms freq floor audit sampling cadence |
+| `SURYAPROFILER_AUDIT_GRACE_MS` | 30000 ms how long a high floor persists before the audit acts |
 
 ## Device E2E status
 

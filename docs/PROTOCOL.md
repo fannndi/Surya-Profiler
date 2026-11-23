@@ -53,3 +53,24 @@ all-missing case successful.
 
 Unknown commands are logged and ignored. Unknown events are non-fatal and
 parsed as `DaemonEvent.Unknown`.
+
+## Diagnostics payload
+
+`diag.diag` carries the config, env snapshot, watchers, holds, the newest
+`thermal_events`, `miui_sp_game` and `recent_logs` — the last ~120 daemon
+log lines (oldest first, `<utc> <tag> [component] message`; `tag`
+E/W/I/D). The app seeds its log view from it when its stderr relay has
+nothing yet; `surya-prof log [--last N] [--level L] [--follow]` reads the
+durable file (`<state_dir>/logs/daemon.log`, rotated at 512 KB with one
+generation kept).
+
+## Config keys (schema 2)
+
+| key | default | Meaning |
+|---|---|---|
+| `enabled`, `dynamic`, `custom_thermal` | true | service / app mapping / thermal takeover |
+| `base_profile` | `"balance"` | universal base (`powersave`/`balance`/`game`) |
+| `app_map` | `{}` | package → profile (user profiles only) |
+| `rnd_input_suspend` | false | R&D: suspend charger input while the service runs |
+| `freq_floor_audit` | true | re-assert the profile CPU floor when an external writer pins it high (yields to MIUI performance mode; backs off 30 s→300 s when a re-assert does not stick) |
+| `log_level` | (env) | `error`/`warn`/`info`/`debug`; the env var `SURYAPROFILER_LOG` seeds the default, a config `log_level` (when present) overrides it — applied live on every config reload |

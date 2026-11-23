@@ -1,6 +1,7 @@
 package com.suryaprofiler.config
 
 import com.suryaprofiler.protocol.ProfileId
+import com.suryaprofiler.protocol.strOrNull
 import org.json.JSONObject
 
 /** Pure schema-2 config model. No Android imports, so it is JVM-testable. */
@@ -12,6 +13,10 @@ data class AppConfig(
     val appMap: Map<String, ProfileId> = emptyMap(),
     val rndInputSuspend: Boolean = false,
     val restorePending: Boolean = false,
+    /** Freq floor audit sentinel (auto re-assert of a drifted CPU floor). */
+    val freqFloorAudit: Boolean = true,
+    /** Daemon log level (error|warn|info|debug); null = env/default. */
+    val logLevel: String? = null,
 )
 
 /**
@@ -54,6 +59,8 @@ object ConfigCodec {
             appMap = map,
             rndInputSuspend = json.optBoolean("rnd_input_suspend", false),
             restorePending = json.optBoolean("restore_pending", false),
+            freqFloorAudit = json.optBoolean("freq_floor_audit", true),
+            logLevel = json.strOrNull("log_level"),
         )
     }
 
@@ -68,4 +75,6 @@ object ConfigCodec {
         })
         .put("rnd_input_suspend", config.rndInputSuspend)
         .put("restore_pending", config.restorePending)
+        .put("freq_floor_audit", config.freqFloorAudit)
+        .putOpt("log_level", config.logLevel)
 }

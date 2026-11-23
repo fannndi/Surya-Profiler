@@ -90,4 +90,15 @@ pub struct EnvSnapshot {
     pub little_max_mhz: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub big_max_mhz: Option<u32>,
+    /// Effective policy min frequencies (MHz) — the CPU floor. A floor far
+    /// above the active profile's value is the "stuck idle frequency" sign.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub little_min_mhz: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub big_min_mhz: Option<u32>,
+    /// Active cpufreq governors (who currently owns each policy).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub little_governor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub big_governor: Option<String>,
 }

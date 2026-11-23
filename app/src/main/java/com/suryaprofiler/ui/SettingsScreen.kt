@@ -49,6 +49,8 @@ fun SettingsScreen(
     serviceRunning: Boolean,
     customThermal: Boolean,
     onCustomThermal: (Boolean) -> Unit,
+    freqFloorAudit: Boolean,
+    onFreqFloorAudit: (Boolean) -> Unit,
     rndInputSuspend: Boolean,
     onRndInputSuspend: (Boolean) -> Unit,
     onBack: () -> Unit,
@@ -139,6 +141,23 @@ fun SettingsScreen(
                         Switch(
                             checked = customThermal,
                             onCheckedChange = onCustomThermal,
+                        )
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Freq floor audit", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "Keeps the active profile's CPU floor: if something " +
+                                    "else pins the frequency high with no activity, the " +
+                                    "daemon re-asserts it and logs who did. Yields to " +
+                                    "MIUI performance mode.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = freqFloorAudit,
+                            onCheckedChange = onFreqFloorAudit,
                         )
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

@@ -84,7 +84,8 @@ pub enum Event {
     /// Full runtime snapshot (emitted when anything visible changes).
     State { state: Snapshot },
     /// Environment sample (battery / thermal / GPU busy) — emitted on change.
-    Env { env: EnvSnapshot },
+    /// Boxed: EnvSnapshot outgrew the other variants (clippy).
+    Env { env: Box<EnvSnapshot> },
     /// Diagnostics reply for `cmd: diag` (boxed: it carries the whole config).
     Diag { diag: Box<DiagInfo> },
     /// Transition history reply for `cmd: stats` (plus auto-revive totals).
@@ -168,6 +169,9 @@ pub struct DiagInfo {
     /// `Some(true)`/`Some(false)` only when a foreground package is known.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub miui_sp_game: Option<bool>,
+    /// Newest daemon log lines (ring buffer, oldest first; display only).
+    #[serde(default)]
+    pub recent_logs: Vec<String>,
 }
 
 // --- emission ---------------------------------------------------------------
@@ -276,13 +280,14 @@ impl Publisher {
         }
     }
 
-    /// Human log line on stderr (relayed to logcat by the app).
+    /// Human log line: levelled logger (ring + file) with a stderr mirror
+    /// that the app relays to logcat.
     ///
     /// Never use `eprintln!`: the crate is built with `panic = "abort"`, and
     /// an app death closes stderr at the same time as stdin — an EPIPE panic
     /// would abort before the exit restore. A failed log write is ignored.
     pub fn log(&self, msg: &str) {
-        let _ = writeln!(std::io::stderr(), "{msg}");
+        crate::logging::write(crate::logging::Level::Info, "daemon", msg);
     }
 }
 

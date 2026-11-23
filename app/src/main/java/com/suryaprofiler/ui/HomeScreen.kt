@@ -82,6 +82,8 @@ fun HomeScreen(vm: HomeViewModel) {
                 serviceRunning = state.serviceRunning,
                 customThermal = state.customThermal,
                 onCustomThermal = vm::onCustomThermal,
+                freqFloorAudit = state.freqFloorAudit,
+                onFreqFloorAudit = vm::onFreqFloorAudit,
                 rndInputSuspend = state.rndInputSuspend,
                 onRndInputSuspend = vm::onRndInputSuspend,
                 onBack = { dest = HomeDest.HOME },

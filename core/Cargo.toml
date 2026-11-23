@@ -1,6 +1,6 @@
 [package]
 name = "surya-profiler-core"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 description = "MIUI 14-harmonized performance profiler core (POCO X3 NFC / surya, Android 12)"
 license = "Apache-2.0"

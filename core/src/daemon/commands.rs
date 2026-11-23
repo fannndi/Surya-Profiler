@@ -13,6 +13,9 @@ use super::{Command, Event, Msg, Runtime, SLEEP_DELAY_MS, VERSION};
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
+/// Log lines handed to the app with every `diag` reply (display only).
+const RECENT_LOG_LINES: usize = 120;
+
 impl Runtime {
     pub(super) fn on_command(&mut self, cmd: Command) -> bool {
         match cmd {
@@ -33,6 +36,7 @@ impl Runtime {
                 // never swallow a write)
                 if self.config.reload() {
                     self.log("config reloaded");
+                    crate::logging::set_level_str(self.config.get().log_level.as_deref());
                 }
                 if self.config.get().enabled && !self.restoring {
                     // A previously failed stale-hold release or restore leaves
@@ -173,6 +177,7 @@ impl Runtime {
                         .last_fg
                         .as_deref()
                         .map(crate::engine::thermal_scenario::is_miui_sp_game),
+                    recent_logs: crate::logging::recent(RECENT_LOG_LINES),
                 };
                 self.publisher.emit_reliable(&Event::Diag {
                     diag: Box::new(diag),

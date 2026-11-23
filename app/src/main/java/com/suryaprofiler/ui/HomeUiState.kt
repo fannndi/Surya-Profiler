@@ -33,6 +33,8 @@ data class HomeUiState(
     val dynamicEnabled: Boolean = true,
     /** Per-profile MIUI thermal takeover (stock map remains fallback). */
     val customThermal: Boolean = true,
+    /** Freq floor audit sentinel (auto re-assert of a drifted CPU floor). */
+    val freqFloorAudit: Boolean = true,
     /** R&D: suspend charger input while the service is on. */
     val rndInputSuspend: Boolean = false,
     val mappedCount: Int = 0,

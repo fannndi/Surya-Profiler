@@ -114,6 +114,8 @@ data class DiagInfo(
     /** REA 2026-11-23: PowerKeeper's −2 °C SP-game virtual-sensor
      *  compensation is likely active for [foreground] (null = unknown fg). */
     val miuiSpGame: Boolean? = null,
+    /** Newest daemon log lines (ring buffer, oldest first). */
+    val recentLogs: List<String> = emptyList(),
 )
 
 object DiagnosticsParse {
@@ -206,6 +208,9 @@ object DiagnosticsParse {
             baseProfile = cfg.optString("base_profile", "?"),
             thermalEvents = thermalEvents(d),
             miuiSpGame = d.boolOrNull("miui_sp_game"),
+            recentLogs = d.optJSONArray("recent_logs")?.let { arr ->
+                (0 until arr.length()).map { i -> arr.optString(i) }
+            } ?: emptyList(),
         )
     }
 

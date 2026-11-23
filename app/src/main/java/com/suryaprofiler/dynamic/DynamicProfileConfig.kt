@@ -67,6 +67,13 @@ class DynamicProfileConfig private constructor(context: Context) {
         get() = _rndInputSuspend.value
         set(v) { put { it.put("rnd_input_suspend", v) } }
 
+    /** Freq floor audit: re-assert the profile's CPU floor on drift. */
+    private val _freqFloorAudit = MutableStateFlow(true)
+    val freqFloorAuditFlow: StateFlow<Boolean> = _freqFloorAudit
+    var freqFloorAudit: Boolean
+        get() = _freqFloorAudit.value
+        set(v) { put { it.put("freq_floor_audit", v) } }
+
     /** A Service OFF was started but not confirmed yet (crash recovery). */
     private val _restorePending = MutableStateFlow(false)
     val restorePending: Boolean get() = _restorePending.value
@@ -168,6 +175,7 @@ class DynamicProfileConfig private constructor(context: Context) {
         _appMap.value = cfg.appMap.mapValues { it.value.wire }
         _rndInputSuspend.value = cfg.rndInputSuspend
         _restorePending.value = cfg.restorePending
+        _freqFloorAudit.value = cfg.freqFloorAudit
     }
 
     /**

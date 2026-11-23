@@ -92,11 +92,12 @@ impl Runtime {
                     Some(profile.clone()),
                     Some(reason.clone()),
                 );
-                // config/pack changes, explicit taps and the first apply of
-                // this daemon run must re-plan even when the profile id is
-                // unchanged (new keys, drift while we were down)
-                let force =
-                    matches!(trigger, "config" | "profiles" | "watchdog") || !self.reconciled;
+                // config/pack changes, explicit taps, the first apply of
+                // this daemon run and the freq-floor audit must re-plan even
+                // when the profile id is unchanged (new keys, drift while we
+                // were down)
+                let force = matches!(trigger, "config" | "profiles" | "watchdog" | "freq_audit")
+                    || !self.reconciled;
                 if force {
                     self.log("evaluate: forced re-plan");
                 }
@@ -107,7 +108,7 @@ impl Runtime {
                     used_saver: input.saver_on,
                     queued: Instant::now(),
                     force,
-                    watchdog: trigger == "watchdog",
+                    watchdog: trigger == "watchdog" || trigger == "freq_audit",
                     sticky: false,
                 };
                 let _ = self.work_tx.send(Work::Apply(job));
@@ -159,6 +160,8 @@ impl Runtime {
         if !self.screen_on && self.config.get().enabled && ticks.is_multiple_of(PERIODIC_TICKS) {
             let _ = self.sync_tx.send(self.bridge_ctx(self.active.clone()));
         }
+        // Freq floor audit: rate-limits itself to ~15 s; cheap (2 file reads).
+        self.freq_audit_tick();
         let wd_ms = watchdog_secs() * 1000;
         if wd_ms > 0 && self.config.get().enabled {
             self.watchdog_tick += 1;

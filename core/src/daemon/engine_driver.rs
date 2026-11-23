@@ -38,6 +38,38 @@ impl EngineDriver for EngineApplier {
         };
         match apply::apply_with_pass2(&self.store, profile, reconcile) {
             Ok(rep) => {
+                // Per-key detail for debugging: failed writes are warnings,
+                // transient readback mismatches and locked keys stay Debug.
+                for r in &rep.results {
+                    if let Some(e) = &r.error {
+                        crate::logging::write(
+                            crate::logging::Level::Warn,
+                            "apply",
+                            &format!("{}: {e}", r.key),
+                        );
+                    } else if r.written && !r.verified {
+                        crate::logging::write(
+                            crate::logging::Level::Debug,
+                            "apply",
+                            &format!(
+                                "{}: written={}, readback mismatch (transient)",
+                                r.key, r.resolved
+                            ),
+                        );
+                    }
+                }
+                if !rep.locked.is_empty() && crate::logging::enabled(crate::logging::Level::Debug) {
+                    let list: Vec<String> = rep
+                        .locked
+                        .iter()
+                        .map(|l| format!("{}: {}", l.key, l.reason))
+                        .collect();
+                    crate::logging::write(
+                        crate::logging::Level::Debug,
+                        "apply",
+                        &format!("locked: {}", list.join("; ")),
+                    );
+                }
                 // `locked` is not a failure by itself (optional/absent nodes),
                 // but if every attempted write was rejected by the kernel,
                 // the profile was never applied. Keep the host/simulation

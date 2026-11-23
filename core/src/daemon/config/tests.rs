@@ -10,6 +10,8 @@ fn defaults_are_service_ready() {
     let c = DaemonConfig::default();
     assert!(c.enabled && c.dynamic);
     assert!(c.custom_thermal, "thermal takeover defaults on");
+    assert!(c.freq_floor_audit, "freq floor audit defaults on");
+    assert_eq!(c.log_level, None, "log level comes from env by default");
     assert_eq!(c.schema, SCHEMA);
     assert_eq!(c.base_profile, "balance");
     assert!(c.app_map.is_empty());
@@ -89,6 +91,18 @@ fn legacy_schema_one_keys_are_ignored() {
 fn custom_thermal_can_be_disabled() {
     let c: DaemonConfig = serde_json::from_str(r#"{"custom_thermal":false}"#).unwrap();
     assert!(!c.custom_thermal);
+}
+
+#[test]
+fn freq_audit_and_log_level_roundtrip() {
+    let c: DaemonConfig =
+        serde_json::from_str(r#"{"freq_floor_audit":false,"log_level":"debug"}"#).unwrap();
+    assert!(!c.freq_floor_audit, "explicit off must stick");
+    assert_eq!(c.log_level.as_deref(), Some("debug"));
+
+    // fail-closed keeps the audit off too: no tuning from invented defaults
+    let (cfg, _) = ConfigFile::load(&tmpdir("cfg-broken").join("missing.json"));
+    assert!(!cfg.get().freq_floor_audit);
 }
 
 #[test]

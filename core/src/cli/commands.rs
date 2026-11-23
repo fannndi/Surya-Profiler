@@ -139,6 +139,20 @@ pub(super) fn run(a: &Args) -> Result<(i32, String), String> {
             let json = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
             Ok((if ok { 0 } else { 1 }, json))
         }
+        "debug" => {
+            // read-only live report; no root needed, safe while the daemon runs
+            let sub = a.id.as_deref().unwrap_or("env");
+            match sub {
+                "env" => {
+                    let payload = diagnose::debug_env(&a.state_dir)?;
+                    let json = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
+                    Ok((0, json))
+                }
+                other => Err(format!(
+                    "unknown debug target '{other}' (available: env)\n{USAGE}"
+                )),
+            }
+        }
         "status" => {
             let state = store.load_state();
             let snap = store.load_snapshot();
