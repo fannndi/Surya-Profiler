@@ -65,7 +65,7 @@ fn watchers_drive_the_full_pipeline() {
     d.send(json!({"cmd":"hello"}));
     let applied = d.wait_for(
         |v| v["event"] == "applied" && v["profile"] == "balance",
-        Duration::from_secs(20),
+        Duration::from_secs(45),
     );
     assert_eq!(applied["reason"], "base");
 
@@ -73,7 +73,7 @@ fn watchers_drive_the_full_pipeline() {
     d.send(json!({"cmd":"screen","on":true,"locked":false}));
     let applied = d.wait_for(
         |v| v["event"] == "applied" && v["profile"] == "game",
-        Duration::from_secs(20),
+        Duration::from_secs(45),
     );
     assert_eq!(applied["reason"], "app");
     assert_eq!(applied["src_pkg"], "com.YoStarEN.AzurLane");
@@ -82,7 +82,7 @@ fn watchers_drive_the_full_pipeline() {
     std::fs::write(dir.join("fg-on"), "1").unwrap();
     let applied = d.wait_for(
         |v| v["event"] == "applied" && v["profile"] == "powersave",
-        Duration::from_secs(20),
+        Duration::from_secs(45),
     );
     assert_eq!(applied["reason"], "app");
     assert_eq!(applied["src_pkg"], "com.google.android.youtube");

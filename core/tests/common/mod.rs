@@ -160,9 +160,13 @@ impl WaitTimeout for Child {
 }
 
 /// Fresh temp dir per test (process-id + tag tagged, recreated on entry).
+///
+/// Lives under `core/target/tmp/` so test artifacts (including
+/// `daemon-stderr.log`) stay inside the workspace, not /tmp.
 pub fn tmp(tag: &str) -> PathBuf {
-    let mut d = std::env::temp_dir();
-    d.push(format!("suryaprofiler-test-{tag}-{}", std::process::id()));
+    let d = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("target/tmp")
+        .join(format!("{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d

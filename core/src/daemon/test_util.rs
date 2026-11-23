@@ -12,8 +12,10 @@ pub fn map(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
 
 /// Fresh temp dir per test (process-id tagged, removed on entry).
 pub fn tmpdir(tag: &str) -> std::path::PathBuf {
-    let mut d = std::env::temp_dir();
-    d.push(format!("suryaprofiler-test-{tag}-{}", std::process::id()));
+    // Under `target/tmp` so test artifacts stay inside the workspace.
+    let d = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("target/tmp")
+        .join(format!("{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d
