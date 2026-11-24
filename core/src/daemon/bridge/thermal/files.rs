@@ -125,6 +125,9 @@ pub(crate) fn scan() -> Value {
 pub(crate) fn scan_at(root: &Path) -> Value {
     let base = thermal_base(root);
     let config = base.join("config");
+    let config_present = config.exists();
+    let config_is_dir = config.is_dir();
+    let config_ok = !config_present || config_is_dir;
     let mut entries = entries_in(&config);
     // Owned files are reported but never flagged foreign.
     let owned = |name: &str| config_file_allowed(name);
@@ -146,10 +149,17 @@ pub(crate) fn scan_at(root: &Path) -> Value {
             "old": getprop_str("sys.thermal.data.path"),
         },
         "global_mode": read_i32(&base.join("thermal-global-mode")),
+        "config_present": config_present,
+        "config_is_dir": config_is_dir,
+        "config_repair_hint": if config_ok {
+            Value::Null
+        } else {
+            json!("config path is a file; `doctor --fix-thermal` rebuilds it")
+        },
         "entries": entries,
         "foreign": foreign,
         "modules": modules,
-        "clean": foreign.is_empty() && modules.is_empty(),
+        "clean": config_ok && foreign.is_empty() && modules.is_empty(),
     })
 }
 
@@ -216,6 +226,22 @@ pub(crate) fn fix_at(root: &Path) -> Value {
         .cloned()
         .unwrap_or_default();
 
+    // A corrupted `/data/vendor/thermal` tree can leave `config` as a file;
+    // create_dir_all then fails forever. Rebuild it like Scene's
+    // `clear_thermal_dir` (chattr -i first, then remove + recreate).
+    let mut config_rebuilt = false;
+    if config.exists() && !config.is_dir() {
+        if on_device {
+            let _ = crate::platform::run(
+                "/system/bin/chattr",
+                &["-R", "-i", &config.display().to_string()],
+                std::time::Duration::from_secs(10),
+            );
+        }
+        let _ = fs::remove_file(&config);
+        config_rebuilt = fs::create_dir_all(&config).is_ok();
+    }
+
     let chattr_ok = on_device
         .then(|| {
             crate::platform::run(
@@ -261,6 +287,7 @@ pub(crate) fn fix_at(root: &Path) -> Value {
         "foreign_before": foreign_before.len(),
         "removed": removed,
         "failed": failed,
+        "config_rebuilt": config_rebuilt,
         "chattr_ok": chattr_ok,
         "restorecon_ok": restorecon_ok,
         "clean_after": after["clean"],

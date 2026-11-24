@@ -8,20 +8,22 @@ impl Bridge {
         self.blocked.store(true, Ordering::Release);
     }
 
-    /// True when `holds.json` has any active hold.
+    /// True when `holds.json` or `affinity.json` has any active state.
     pub(crate) fn has_holds(&self) -> bool {
-        self.lock().holds.any_held()
+        let st = self.lock();
+        st.holds.any_held() || st.affinity.managed()
     }
 
-    /// One full sync: MIUI saver follow, R&D input suspend, thermal profile.
-    /// Serialized by the internal Mutex; safe to call after every decision.
+    /// One full sync: MIUI saver follow, R&D input suspend, thermal profile,
+    /// opt-in thread placement. Serialized by the internal Mutex; safe to call
+    /// after every decision.
     ///
     /// The restore gate is checked *inside* the lock. `release_all` takes the
     /// same lock before it writes anything back, so a sync either completes
     /// before the release (and is then undone by it) or observes the gate and
     /// returns without touching the device.
     pub(crate) fn sync(&self, ctx: &SyncCtx) {
-        let (saver_changed, input_suspend_changed, thermal_changed) = {
+        let (saver_changed, input_suspend_changed, thermal_changed, affinity_changed) = {
             let mut st = self.lock();
             if self.blocked.load(Ordering::Acquire) || !ctx.enabled {
                 return;
@@ -29,12 +31,22 @@ impl Bridge {
             let saver_changed = self.sync_saver(&mut st, ctx);
             let input_suspend_changed = self.sync_input_suspend(&mut st, ctx);
             let thermal_changed = self.sync_thermal(&mut st, ctx);
-            (saver_changed, input_suspend_changed, thermal_changed)
+            let affinity_changed = affinity::sync(&mut st.affinity, ctx);
+            (
+                saver_changed,
+                input_suspend_changed,
+                thermal_changed,
+                affinity_changed,
+            )
         };
         if saver_changed || input_suspend_changed || thermal_changed {
             self.refresh_attribution();
             let st = self.lock();
             self.persist(&st);
+        }
+        if affinity_changed {
+            let st = self.lock();
+            self.persist_affinity(&st);
         }
     }
 
@@ -46,6 +58,7 @@ impl Bridge {
     pub(crate) fn release_all(&self) -> ReleaseReport {
         let mut report = ReleaseReport::default();
         let mut changed = false;
+        let mut affinity_changed = false;
         {
             let mut st = self.lock();
             self.blocked.store(true, Ordering::Release);
@@ -93,11 +106,23 @@ impl Bridge {
             if thermal_released {
                 changed = true;
             }
+
+            match affinity::release(&mut st.affinity) {
+                Ok(released) => affinity_changed = released,
+                Err(e) => {
+                    report.affinity_ok = false;
+                    self.log_event(format!("thread placement release failed: {e}"));
+                }
+            }
         }
         if changed {
             self.refresh_attribution();
             let st = self.lock();
             self.persist(&st);
+        }
+        if affinity_changed {
+            let st = self.lock();
+            self.persist_affinity(&st);
         }
         if report.ok() {
             self.log_event("all holds released".into());
@@ -110,5 +135,19 @@ impl Bridge {
     /// Re-enable syncs after a failed restore (the service stays alive).
     pub(crate) fn resume(&self) {
         self.blocked.store(false, Ordering::Release);
+    }
+
+    /// Crash recovery: restore thread placement left by a previous daemon
+    /// before the first decision. The next sync re-applies if the game is
+    /// still foreground and the feature is enabled.
+    pub(crate) fn reconcile_orphan_affinity(&self) {
+        let mut st = self.lock();
+        if !st.affinity.managed() {
+            return;
+        }
+        let changed = affinity::reconcile(&mut st.affinity);
+        if changed {
+            self.persist_affinity(&st);
+        }
     }
 }

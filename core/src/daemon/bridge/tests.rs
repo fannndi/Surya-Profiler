@@ -46,6 +46,7 @@ fn blocked_bridge_ignores_syncs() {
         profile: Some("powersave".into()),
         custom_thermal: true,
         rnd_input_suspend: true,
+        thread_affinity: false,
     };
     bridge.sync(&ctx);
     let st = bridge.lock();

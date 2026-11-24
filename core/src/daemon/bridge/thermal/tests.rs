@@ -62,6 +62,25 @@ fn custom_indices_do_not_overlap_miui_scenarios() {
 }
 
 #[test]
+fn repairs_a_config_path_that_is_a_file() {
+    let root = tmp("config-file");
+    let config = root.join("data/vendor/thermal/config");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "not a dir").unwrap();
+
+    let scan = files::scan_at(&root);
+    assert_eq!(scan["config_is_dir"], false);
+    assert_eq!(scan["clean"], false);
+    assert!(scan["config_repair_hint"].as_str().is_some());
+
+    let fix = files::fix_at(&root);
+    assert_eq!(fix["config_rebuilt"], true);
+    assert_eq!(fix["clean_after"], true);
+    assert!(config.is_dir());
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn map_keeps_every_stock_entry_and_adds_four() {
     let root = tmp("map-fallback");
     let entries = parse_map(&build_map_at(&root).unwrap().text).unwrap();

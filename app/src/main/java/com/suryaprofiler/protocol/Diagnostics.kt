@@ -106,6 +106,10 @@ data class DiagInfo(
     val thermalProfile: String?,
     val thermalYield: Int?,
     val statsLen: Int,
+    /** Opt-in per-app thread placement state. */
+    val affinityHeld: Boolean = false,
+    val affinityApp: String? = null,
+    val affinityThreads: Int = 0,
     val configEnabled: Boolean,
     val configDynamic: Boolean,
     val baseProfile: String,
@@ -116,6 +120,9 @@ data class DiagInfo(
     val miuiSpGame: Boolean? = null,
     /** Newest daemon log lines (ring buffer, oldest first). */
     val recentLogs: List<String> = emptyList(),
+    /** UFS health raw hex (read-only; `0x06` life, `0x01` EOL). */
+    val storageLife: String? = null,
+    val storageEol: String? = null,
 )
 
 object DiagnosticsParse {
@@ -202,6 +209,9 @@ object DiagnosticsParse {
             thermalSavedSconfig = h.intOrNull("thermal_saved_sconfig"),
             thermalProfile = h.strOrNull("thermal_profile"),
             thermalYield = h.intOrNull("thermal_yield"),
+            affinityHeld = h.optBoolean("affinity_held"),
+            affinityApp = h.strOrNull("affinity_app"),
+            affinityThreads = h.optInt("affinity_threads"),
             statsLen = d.optInt("stats_len"),
             configEnabled = cfg.optBoolean("enabled"),
             configDynamic = cfg.optBoolean("dynamic"),
@@ -211,6 +221,8 @@ object DiagnosticsParse {
             recentLogs = d.optJSONArray("recent_logs")?.let { arr ->
                 (0 until arr.length()).map { i -> arr.optString(i) }
             } ?: emptyList(),
+            storageLife = d.strOrNull("storage_life"),
+            storageEol = d.strOrNull("storage_eol"),
         )
     }
 

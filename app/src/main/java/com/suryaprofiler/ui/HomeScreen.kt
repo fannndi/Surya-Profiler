@@ -84,6 +84,8 @@ fun HomeScreen(vm: HomeViewModel) {
                 onCustomThermal = vm::onCustomThermal,
                 freqFloorAudit = state.freqFloorAudit,
                 onFreqFloorAudit = vm::onFreqFloorAudit,
+                threadAffinity = state.threadAffinity,
+                onThreadAffinity = vm::onThreadAffinity,
                 rndInputSuspend = state.rndInputSuspend,
                 onRndInputSuspend = vm::onRndInputSuspend,
                 onBack = { dest = HomeDest.HOME },

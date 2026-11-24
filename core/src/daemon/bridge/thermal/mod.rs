@@ -21,12 +21,13 @@
 //! +200, +500). Its package map maps YouTube to 21, for example. 60–63 is
 //! outside every MIUI value and below mi_thermald's map-ID limit (0–64).
 //!
-//! The SS/GPU steps use the `nvm-therm-adc` zone directly: MIUI's
-//! `VIRTUAL-SENSOR` is rejected on this boot (`check_sensor_valid`), while a
-//! direct sensor drives the cpufreq cooling device correctly. Screen-on
-//! policy floors (big 1.8432 GHz, little 1.6128 GHz) mean thermal targets
-//! below those values are clamped by the kernel; the custom steps therefore
-//! use real frequencies at/above the floor.
+//! The SS/GPU steps use the `nvm-therm-adc` zone directly. The vendor config
+//! wraps the same zone in a weight-1 `[VIRTUAL-SENSOR]`; referencing
+//! `VIRTUAL-SENSOR` without defining it is what `check_sensor_valid` rejects,
+//! so our configs address the real zone instead (equivalent on surya).
+//! Screen-on policy floors (big 1.8432 GHz, little 1.6128 GHz) mean thermal
+//! targets below those values are clamped by the kernel; the custom steps
+//! therefore use real frequencies at/above the floor.
 //!
 //! Ownership: a `.suryaprofiler` marker makes the takeover idempotent and
 //! prevents us from clobbering another thermal mod's `/data` files. On

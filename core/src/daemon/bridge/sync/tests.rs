@@ -16,6 +16,7 @@ fn ctx(pairs: &[(&str, &str)], fg: Option<&str>) -> SyncCtx {
         profile: None,
         custom_thermal: false,
         rnd_input_suspend: false,
+        thread_affinity: false,
     }
 }
 

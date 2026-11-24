@@ -944,7 +944,7 @@ Apache-2.0; perhatian lisensi per repo di bawah.
 |---|---|---|
 | `vtools_en` (Scene 5.3) | **GPLv3** | Sumber ide terbanyak — dianulir hanya di level spesifikasi/angka, **tidak menyalin kode** (ide/fakta teknis tidak berhak cipta; kode Kotlin/shell-nya GPL) |
 | `packages_apps_XiaomiParts` (AOSPA fork) | Apache-2.0 | Bukan sumber node performa (display/audio/haptic); 1 temuan telemetri |
-| `mi-thermal-crypt` | Apache-2.0 | Sudah tercakup — `core/src/engine/crypt.rs` terbukti identik |
+| `mi-thermal-crypt` | no explicit license file | Sudah tercakup — `core/src/engine/crypt.rs` ditulis independen + differential vectors (bukan salinan kode) |
 | `android_packages_apps_GameSpace` | Apache-2.0 | Tidak layak untuk MIUI stock (butuh patch framework + privapp) |
 
 ### 2. Fakta live device (2026-11-23)
@@ -1051,8 +1051,9 @@ diimplementasi — menunggu doctor/guard stabil.
   (path node, angka, format config, perilaku daemon) atau penulisan-ulang
   dari spesifikasi; tidak ada kode Scene disalin. Biner `scene-scheduler`
   tidak didistribusikan.
-- XiaomiParts/GameSpace/mi-thermal-crypt: Apache-2.0 — atribusi pola tetap
-  dicatat di sini sesuai etika.
+- XiaomiParts/GameSpace: Apache-2.0 — atribusi pola tetap
+  dicatat di sini sesuai etika. `mi-thermal-crypt` tidak menyertakan file
+  lisensi; implementasi kita independen, diverifikasi differential vectors.
 
 
 ---
@@ -1371,3 +1372,87 @@ setelah screen-off. Kesimpulan:
 
 Catatan: audit versi pertama (sebelum revisi ini) sempat re-assert saat
 screen-on — eksperimen di atas yang mengoreksi desainnya.
+
+---
+
+## REFERENCES-AND-PLACEMENT-2026-11-24.md
+
+## Audit referensi lanjutan + thread placement 0.9.0 — 2026-11-24
+
+Scope: audit source-level keempat repo referensi (bukan hanya angka), cek
+device read-only, lalu implementasi Fase 6 (thread placement) + hardening
+thermal/diagnostik.
+
+### 1. Temuan audit yang belum tercatat
+
+| Sumber | Temuan | Tindakan |
+|---|---|---|
+| Scene `powercfg/sm6150/profile.json` | Mask affinity per-app: Genshin `UnityMain→C0`, `UnityGfx→40`, `UnityMultiRende→20`, `Worker Thread→1C`, other `3F`; sgame `UnityMain/UnityGfx/UnityPreload→C0`; PUBG `RenderThread→80`, `Thread-/TaskGraphNP→70` | Dasar rules `bridge/affinity` (hanya main/render yang diambil; worker/audio tidak) |
+| Scene `powercfg/sm6150/active.sh` | `set_cpu_freq` menulis `msm_performance`; powerkey boost; `sched_boost_on_input`; big core_ctl on; UFS clkscale off; angka 2.5/2.75 GHz | Semua ditolak (hard rule #1/#5/#10, OPP big surya max 2304000) |
+| Scene `thermal_conf3/config.sh` | `chattr -R -i` → hapus → `restorecon`; rebuild bila `config` jadi file; restart `mi_thermald` | `doctor --fix-thermal` sudah setara; tambah rebuild config-path (0.9.0) |
+| Scene `mi-thermal-config/miui-thermal.go` | AES-128-CBC, key=IV `thermalopenssl.h`, PKCS5/7; file plaintext dilewati | Konfirmasi `crypt.rs`; `decrypt_or_plain` sudah menangani map plaintext |
+| `mi-thermal-crypt` | **Tidak ada file LICENSE** (bukan Apache-2.0) | Koreksi tabel lisensi di atas |
+| XiaomiParts `FPSInfoService` | `measured_fps` = `/sys/class/drm/card0/sde-crtc-0/measured_fps` | Sampler kita sudah memakai path yang sama |
+| XiaomiParts refresh/KCAL/HBM/CABC | `Settings.System`/display props, butuh sharedUserId system | Out of scope (framework-owned) |
+| GameSpace | `GameManager.setGameMode`, game bar overlay, privapp/system UID | Tidak ada node/trik yang bisa dipakai di MIUI stock |
+| Vendor thermal (decrypt) | `thermal-chg-only.conf`/`thermal-engine.conf` **plaintext**; `thermal-normal.conf` memakai `[VIRTUAL-SENSOR]` weight 1 = `nvm-therm-adc` | Koreksi README thermal (bukan “VIRTUAL-SENSOR ditolak”) |
+
+### 2. Cek live device (read-only, sebelum implementasi)
+
+| Cek | Hasil |
+|---|---|
+| Root / taskset | `u:r:magisk:s0`; `/system/bin/taskset` (toybox) |
+| `/proc/<pid>/task/<tid>/{comm,status}` | terbaca; `Cpus_allowed_list` tersedia |
+| cpuset stock | bg `0-2`, sysbg `0-3`, fg `0-2,4-7`, fg/boost `4-7`, top-app `0-7` |
+| UFS health | `life_time_estimation_a=0x06` (50–60%), `eol_info=0x01` (normal) |
+| Thermal context | owned files `thermal_data_file`, 0644; `restorecon` tidak perlu |
+| `measured_fps` | terbaca sebagai root |
+
+### 3. Implementasi 0.9.0
+
+- **Config:** `thread_affinity` (schema 2 aditif, default false); Kotlin
+  `AppConfig`/`ConfigCodec`/`DynamicProfileConfig` + Settings switch.
+- **Daemon:** `bridge/affinity/` (`rules.rs`, `proc.rs`, `mod.rs`), state
+  `affinity.json`, `SyncCtx.thread_affinity`, release report
+  `affinity_ok`, startup orphan reconcile.
+- **Rules:** `UnityMain`/`GameThread` → `c0` (6-7), `UnityGfx*`/
+  `RenderThread`/`RHIThread` → `40` (6); other threads untouched.
+- **Safety:** exact package + uid ≥ 10000; mask subset dari
+  `Cpus_allowed_list`; tidak pernah melebarkan mask; bila app mengubah
+  affinity thread yang kita pegang, record dilepas dan thread di-yield
+  untuk sesi app itu (tidak dipin ulang); restore hanya bila mask masih
+  sama dengan yang kita tulis.
+- **Hardening thermal:** `SelectOutcome::Failed` → `install_all()` sekali
+  (marker masih ada), lalu retry normal setelah backoff.
+- **Doctor/diag:** config-path bukan direktori dilaporkan + `--fix-thermal`
+  rebuild; UFS health `storage_life/storage_eol` + kartu Diagnostics.
+- **Docs:** README/ARCHITECTURE/PROTOCOL/DEVICE-E2E/AGENTS diperbarui;
+  klaim VIRTUAL-SENSOR dan lisensi mi-thermal-crypt dikoreksi.
+
+### 4. E2E device (surya, 2026-11-24)
+
+| Step | Hasil |
+|---|---|
+| Build/deploy 0.9.0 | APK versionCode 11 / versionName 0.9.0; binary md5 cocok |
+| Config `thread_affinity:true`, Seven Knights (`com.netmarble.skiagb`) foreground | `sconfig=61` (game), daemon log `pinned UnityGfxDeviceW->6, UnityGfxDeviceW->6, RenderThread->6, RenderThread->6` |
+| Thread masks | `RenderThread` 6, `UnityGfxDeviceW` 6; `UnityMain` sudah 6-7 tanpa tulisan kita (tidak disentuh) |
+| Leave ke launcher | `sconfig=60`; `affinity.json` kosong; log `released 4 thread(s)`; mask kembali ke 6-7 (captured old mask) |
+| Force-stop app (stdin EOF) | exit cleanup `ok=true restored=true wrote=13 verified=13 failed=0 affinity_ok=true`; 4/4 restore; `affinity.json` kosong |
+| Switch OFF | tidak ada `taskset`/entry (host E2E `placement_stays_off...`) |
+| Corrupt `thermal-game.conf` (7 byte) lalu masuk game | log `select failed ... configs reinstalled (vendor)`; file kembali 1200 byte; `decrypt.txt=[GAME-SS-CPU6]`; retry → `game active (sconfig 61)` |
+| Leave game | `sconfig=60`, `decrypt.txt=[BAL-SS-CPU6]` |
+| Doctor | overall `ok=true`; `storage_health` `0x06`/`0x01`; `thermal_takeover` pass |
+| Final state | service ON, base balance, `sconfig=60`, `thread_affinity=false`, `affinity.json` kosong, stayon false |
+
+### 5. Keputusan
+
+1. **Default OFF** dan hanya untuk app yang di-map ke Game. `UnityMain`
+   yang sudah 6-7 tanpa tulisan kita dibiarkan; pin kita fokus ke render
+   thread.
+2. **Tidak melawan app:** jika app menulis ulang affinity thread yang
+   kita pegang, record dilepas. Ini menghindari perang `taskset` tiap 3 s.
+3. **Tidak ada node katalog baru.** Thread placement adalah operasi proses
+   (`taskset`), bukan sysfs; guard-nya package/uid/mask.
+4. **Thermal repair** aman: hanya menulis ulang file milik marker; tidak
+   menyentuh config vendor/asing.
+5. **UFS health read-only** masuk doctor/diag; tidak ada write.

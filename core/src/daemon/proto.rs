@@ -169,6 +169,11 @@ pub struct DiagInfo {
     /// `Some(true)`/`Some(false)` only when a foreground package is known.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub miui_sp_game: Option<bool>,
+    /// UFS health (read-only): `life_time_estimation_a` / `eol_info` raw hex.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub storage_life: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub storage_eol: Option<String>,
     /// Newest daemon log lines (ring buffer, oldest first; display only).
     #[serde(default)]
     pub recent_logs: Vec<String>,

@@ -15,6 +15,8 @@ data class AppConfig(
     val restorePending: Boolean = false,
     /** Freq floor audit sentinel (auto re-assert of a drifted CPU floor). */
     val freqFloorAudit: Boolean = true,
+    /** Opt-in thread placement for apps mapped to Game (default off). */
+    val threadAffinity: Boolean = false,
     /** Daemon log level (error|warn|info|debug); null = env/default. */
     val logLevel: String? = null,
 )
@@ -60,6 +62,7 @@ object ConfigCodec {
             rndInputSuspend = json.optBoolean("rnd_input_suspend", false),
             restorePending = json.optBoolean("restore_pending", false),
             freqFloorAudit = json.optBoolean("freq_floor_audit", true),
+            threadAffinity = json.optBoolean("thread_affinity", false),
             logLevel = json.strOrNull("log_level"),
         )
     }
@@ -76,5 +79,6 @@ object ConfigCodec {
         .put("rnd_input_suspend", config.rndInputSuspend)
         .put("restore_pending", config.restorePending)
         .put("freq_floor_audit", config.freqFloorAudit)
+        .put("thread_affinity", config.threadAffinity)
         .putOpt("log_level", config.logLevel)
 }

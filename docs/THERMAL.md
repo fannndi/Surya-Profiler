@@ -32,6 +32,10 @@ fallbacks when absent.
   map removal keeps the marker so the next attempt can retry.
 - Unknown `sconfig` makes `mi_thermald` keep its last config, so release
   forces stock normal when needed.
+- A failed select triggers one owned-config rewrite before the normal
+  backoff; `mi_thermald` reloads through its config-dir inotify.
+- `doctor --fix-thermal` also rebuilds `/data/vendor/thermal/config` when it
+  became a file (chattr → remove → mkdir), then removes foreign ships.
 - `surya-prof clean` releases saver/input-suspend/thermal holds without a
   running daemon; `restore` runs it as its final step.
 

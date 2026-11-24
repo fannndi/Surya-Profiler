@@ -9,9 +9,10 @@
 //! reported, never fatal.
 //!
 //! Schema 2 is intentionally tiny: service flags, the universal base, the
-//! per-app mapping, the automatic thermal takeover and the opt-in R&D
-//! input-suspend switch. Everything the app does not need is ignored (old
-//! schema-1 keys disappear on the first app write).
+//! per-app mapping, the automatic thermal takeover, the opt-in R&D
+//! input-suspend switch and the opt-in Game thread placement. Everything the
+//! app does not need is ignored (old schema-1 keys disappear on the first app
+//! write).
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -64,6 +65,11 @@ pub struct DaemonConfig {
     /// re-assert does not stick).
     #[serde(default = "default_true")]
     pub freq_floor_audit: bool,
+    /// Opt-in thread placement for apps mapped to Game (default off).
+    /// Pins Unity/Unreal main+render threads to the gold cores and restores
+    /// the captured affinity on release.
+    #[serde(default)]
+    pub thread_affinity: bool,
     /// Daemon log level (`error|warn|info|debug`); None = env/default.
     #[serde(default)]
     pub log_level: Option<String>,
@@ -84,6 +90,7 @@ impl Default for DaemonConfig {
             app_map: BTreeMap::new(),
             rnd_input_suspend: false,
             freq_floor_audit: true,
+            thread_affinity: false,
             log_level: None,
         }
     }

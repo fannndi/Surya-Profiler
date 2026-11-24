@@ -103,6 +103,14 @@ the catalog guard.
     Service OFF. `temp_state` is an output, never a selector. Screen-on
     floors (big 1.8432 GHz, little 1.6128 GHz) clamp lower thermal targets;
     use floor-aware steps.
+14. **Thread placement is process-level, opt-in, and never widens** — the
+    only non-sysfs write is `taskset` through `bridge/affinity/` (default
+    off). Target only a Game-mapped app's own main process (uid ≥ 10000),
+    only `UnityMain`/`GameThread` → cpu6–7 and `UnityGfx*`/`RenderThread`/
+    `RHIThread` → cpu6, only when the mask is a subset of the live
+    `Cpus_allowed_list`. Capture the per-tid mask in `affinity.json`, restore
+    on leave/screen-off/lock/Service OFF/exit, and yield sticky when the app
+    re-pins a thread. Never touch system processes or widen a mask.
 
 ## File map (keep current)
 
@@ -135,6 +143,7 @@ the catalog guard.
 | `src/daemon/evaluate.rs` | decision point + 3 s supervisor |
 | `src/daemon/worker.rs` | coalescing apply worker |
 | `src/daemon/bridge/thermal/` | profile/paths/io/perf/map/install/select/sync/release/files |
+| `src/daemon/bridge/affinity/` | opt-in Game thread placement (rules, `/proc`, `taskset`, restore) |
 | `src/diagnose/` | `doctor` self-check (battery/miui/env/thermal/thermal-files) + `debug env` |
 | `assets/thermal/` | plaintext balance/game/powersave/sleep configs (encrypted at runtime) |
 | `tests/` | host E2E: protocol, foreground watcher, multi-window probe |
@@ -243,7 +252,10 @@ trips; Service OFF → `active=null / last_mode=restore`, `sconfig=0`, stock
 CPU, all holds released. 0.7.1/0.7.2 (2026-11-23/24) verified the
 foreign-file scanner E2E (`doctor --fix-thermal`), the REA-derived
 ownership map, and a full real-game run with Seven Knights
-(`sconfig=61`, no MIUI override, base re-assert, stock restore). Reboot
+(`sconfig=61`, no MIUI override, base re-assert, stock restore). 0.9.0
+(2026-11-24) verified opt-in thread placement (Seven Knights: RenderThread/
+UnityGfxDeviceW → cpu6, leave/daemon-exit restore, `affinity.json` empty),
+the corrupt-config thermal self-repair, and doctor UFS health. Reboot
 remains covered by the 2026-11-21 run.
 Evidence: `docs/HISTORY.md`.
 
@@ -268,6 +280,8 @@ Evidence: `docs/HISTORY.md`.
   foreign ships in `/data/vendor/thermal/config` (other tools' files shadow
   the vendor config at `sconfig=0`) — CLI-only, daemon must be stopped.
   Evidence: `docs/HISTORY.md`.
-- Thread-affinity per-app (Scene-style `taskset` mapping) is designed but
-  NOT implemented (Fase 6, opt-in default off); see the design section of
-  `docs/HISTORY.md`.
+- Thread placement is implemented (0.9.0) as an **opt-in, default-off**
+  bridge: Game-mapped apps only, `UnityMain`/`GameThread` → cpu6–7,
+  `UnityGfx*`/`RenderThread`/`RHIThread` → cpu6, captured affinity in
+  `affinity.json`, reconciled at startup. It is not per-app configurable yet
+  and must stay within the active cpuset (never widen a mask).

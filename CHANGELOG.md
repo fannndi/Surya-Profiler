@@ -4,6 +4,45 @@
 > (`EVIDENCE-DEVICE`, `EVIDENCE-THERMAL`, `HISTORY`, `OPEN-QUESTIONS`);
 > older entries below still name the original paths.
 
+## 0.9.0 — 2026-11-24 (opt-in thread placement + reference hardening)
+
+- **Thread placement (Fase 6, default OFF).** While an app mapped to
+  **Game** is in front, the daemon pins the critical render-path threads to
+  the gold cores and restores the captured affinity when the app leaves, the
+  screen turns off, the phone locks, or the service stops:
+  `UnityMain`/`GameThread` -> cpu6–7 (`c0`), `UnityGfx*`/`RenderThread`/
+  `RHIThread` -> cpu6 (`40`); worker/audio threads are left alone. Threads
+  are matched by kernel `comm`, the target must be the package's own main
+  process (uid >= 10000), and a mask is only written when it is a subset of
+  the thread's live `Cpus_allowed_list` (never widen). Per-tid restore points
+  live in `affinity.json`; a SIGKILL is repaired at the next daemon start.
+  New Settings switch, config key `thread_affinity` (schema 2, additive),
+  `restored.affinity_ok`, and a Diagnostics row. Host E2E fakes `/proc` +
+  `taskset`; device E2E below.
+- **Thermal repair after a failed select.** A corrupted owned config (marker
+  survived, bytes did not) now triggers one `install_all()` rewrite before
+  the normal backoff; `mi_thermald` reloads through its config-dir inotify.
+- **Doctor: config-path corruption + UFS health.** A
+  `/data/vendor/thermal/config` that became a file is reported
+  (`config_is_dir=false`) and `--fix-thermal` rebuilds it (`chattr -i` →
+  remove → mkdir). `diag`/`doctor` gain read-only UFS health
+  (`life_time_estimation_a`, `eol_info`); Diagnostics shows the decoded
+  values.
+- **Docs corrected.** The thermal README no longer claims MIUI's
+  `VIRTUAL-SENSOR` is unusable: vendor defines it as a weight-1 alias of
+  `nvm-therm-adc`, which our configs address directly. `mi-thermal-crypt`
+  has no explicit license file; our implementation is independent and
+  verified with differential vectors.
+- Host: Rust unit tests + 2 new daemon E2E (placement on/off, restore on
+  leave + Service OFF); Kotlin config/diag tests extended.
+- Device E2E (surya, 2026-11-24): Seven Knights mapped to Game → `sconfig=61`
+  and `RenderThread`/`UnityGfxDeviceW` pinned to cpu6 (`UnityMain` was
+  already on 6-7 without our write); leave → 4/4 released, `affinity.json`
+  empty, `sconfig=60`; daemon exit (force-stop) → `affinity_ok=true`, same
+  restore. Corrupt `thermal-game.conf` → select failure logged, configs
+  reinstalled, game loaded on the retry. Doctor `storage_health` =
+  `0x06`/`0x01`, overall `ok=true`.
+
 ## 0.8.0 — 2026-11-24 (freq floor audit + observability)
 
 - **Freq floor audit sentinel (default ON, screen-off scope).** Reports of

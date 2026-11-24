@@ -31,6 +31,8 @@ data class RestoredEvent(
     val wrote: Int,
     val verified: Int,
     val failed: Int,
+    /** Opt-in thread placement restore succeeded (additive, default true). */
+    val affinityOk: Boolean = true,
 )
 
 /**

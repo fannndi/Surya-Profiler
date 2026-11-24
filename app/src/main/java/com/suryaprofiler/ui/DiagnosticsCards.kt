@@ -68,6 +68,18 @@ internal fun DaemonCard(diag: DiagInfo?) {
                 " · R&D input suspend ${if (diag.inputSuspendHeld) "ON" else "—"}",
         )
         KV(
+            "Thread placement",
+            if (diag.affinityHeld) {
+                "${diag.affinityThreads} thread(s) · ${diag.affinityApp ?: "?"}"
+            } else {
+                "—"
+            },
+        )
+        KV(
+            "Storage health",
+            fmtStorageHealth(diag.storageLife, diag.storageEol),
+        )
+        KV(
             "Config",
             "service ${if (diag.configEnabled) "on" else "off"} · " +
                 "dynamic ${if (diag.configDynamic) "on" else "off"} · base ${diag.baseProfile}",

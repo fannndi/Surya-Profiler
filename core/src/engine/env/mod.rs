@@ -39,4 +39,4 @@ pub use model::EnvSnapshot;
 pub use parsers::*;
 pub use sampler::Sampler;
 pub use scenario::{thermal_mode_name, thermal_scenario_label};
-pub use sysfs::default_root;
+pub use sysfs::{default_root, storage_health};

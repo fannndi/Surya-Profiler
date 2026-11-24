@@ -14,6 +14,7 @@
 //! so a queued foreground context cannot re-engage a saver/input-suspend hold after
 //! the service-off restore has started. A failed restore calls `resume()`.
 
+mod affinity;
 mod holds;
 mod input_suspend;
 mod lifecycle;
@@ -63,6 +64,7 @@ use std::sync::{Arc, Mutex};
 /// Shared bridge (state + IO), one Mutex serializes everything.
 pub struct Bridge {
     holds_path: PathBuf,
+    affinity_path: PathBuf,
     publisher: Arc<Publisher>,
     state: Mutex<State>,
     /// Lock-free attribution mirror: -1 = no hold (arbiter sees live),
@@ -78,6 +80,8 @@ pub struct Bridge {
 
 pub(crate) struct State {
     holds: Holds,
+    /// Thread placement (opt-in Game-only): captured affinity per tid.
+    affinity: affinity::AffinityState,
     /// Rebuild `/data` map/configs on the first thermal sync after a daemon
     /// restart so ROM updates and the 20–23 -> 60–63 migration are picked up.
     thermal_refresh_pending: bool,
@@ -117,6 +121,9 @@ impl Bridge {
             thermal_saved_sconfig: st.holds.thermal_saved_sconfig,
             thermal_profile: st.holds.thermal_profile.clone(),
             thermal_yield: st.holds.thermal_yield,
+            affinity_held: st.affinity.active(),
+            affinity_app: st.affinity.target.clone(),
+            affinity_threads: st.affinity.threads.len(),
         }
     }
 

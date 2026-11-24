@@ -138,6 +138,7 @@ impl Bridge {
                     st.holds.thermal_yield = Some(v);
                 }
                 SelectOutcome::Failed(e) => {
+                    self.repair_after_select_failure(&e);
                     self.thermal_failed(st, format!("select failed: {e}"));
                     let saved = st.holds.thermal_saved_sconfig.unwrap_or(0);
                     // Never remove the map while sconfig may still point at
@@ -216,11 +217,30 @@ impl Bridge {
                     st.holds.thermal_yield = Some(v);
                 }
                 SelectOutcome::Failed(e) => {
+                    self.repair_after_select_failure(&e);
                     self.thermal_failed(st, format!("select failed: {e}"));
                 }
             }
         }
         changed
+    }
+
+    /// A failed select is often a corrupted owned config (truncated/garbled
+    /// while the marker survived). Rewrite the four configs + map once; the
+    /// directory inotify then reloads the current `sconfig` without another
+    /// select. The normal backoff still decides when to retry.
+    fn repair_after_select_failure(&self, err: &str) {
+        if !marker_path().exists() {
+            return;
+        }
+        match install_all() {
+            Ok(src) => self.log_event(format!(
+                "thermal: select failed ({err}); configs reinstalled ({src})"
+            )),
+            Err(e) => self.log_event(format!(
+                "thermal: select failed ({err}); reinstall failed: {e}"
+            )),
+        }
     }
 
     fn thermal_failed(&self, st: &mut State, msg: String) {

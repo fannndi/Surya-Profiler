@@ -146,6 +146,7 @@ impl Runtime {
                 let _ = self.work_tx.send(Work::Restore);
             }
             Command::Diag => {
+                let (storage_life, storage_eol) = crate::engine::env::storage_health();
                 let diag = DiagInfo {
                     version: VERSION,
                     pid: std::process::id(),
@@ -177,6 +178,8 @@ impl Runtime {
                         .last_fg
                         .as_deref()
                         .map(crate::engine::thermal_scenario::is_miui_sp_game),
+                    storage_life,
+                    storage_eol,
                     recent_logs: crate::logging::recent(RECENT_LOG_LINES),
                 };
                 self.publisher.emit_reliable(&Event::Diag {

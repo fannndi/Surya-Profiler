@@ -14,6 +14,7 @@ class ConfigCodecTest {
         assertTrue(cfg.dynamic)
         assertTrue(cfg.customThermal)
         assertTrue(cfg.freqFloorAudit)
+        assertFalse(cfg.threadAffinity)
         assertEquals(null, cfg.logLevel)
         assertEquals(ProfileId.BALANCE, cfg.baseProfile)
         assertFalse(cfg.restorePending)
@@ -51,6 +52,7 @@ class ConfigCodecTest {
             rndInputSuspend = false,
             restorePending = true,
             freqFloorAudit = false,
+            threadAffinity = true,
             logLevel = "debug",
         )
         val json = ConfigCodec.encode(cfg)
@@ -58,6 +60,7 @@ class ConfigCodecTest {
         assertEquals(ProfileId.GAME, ConfigCodec.decode(json).baseProfile)
         assertTrue(ConfigCodec.decode(json).restorePending)
         assertFalse(ConfigCodec.decode(json).freqFloorAudit)
+        assertTrue(ConfigCodec.decode(json).threadAffinity)
         assertEquals("debug", ConfigCodec.decode(json).logLevel)
         assertEquals("powersave", json.getJSONObject("app_map").getString("com.p"))
     }
@@ -66,5 +69,6 @@ class ConfigCodecTest {
         val json = ConfigCodec.encode(AppConfig())
         assertFalse("null log level must not become a string", json.has("log_level"))
         assertTrue(json.getBoolean("freq_floor_audit"))
+        assertFalse(json.getBoolean("thread_affinity"))
     }
 }

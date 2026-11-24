@@ -96,6 +96,7 @@ class DaemonEventRouter(
                     wrote = event.wrote,
                     verified = event.verified,
                     failed = event.failed,
+                    affinityOk = event.affinityOk,
                 ),
             )
 

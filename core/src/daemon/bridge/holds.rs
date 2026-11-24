@@ -21,6 +21,9 @@ pub struct ReleaseReport {
     pub saver_ok: bool,
     pub input_suspend_ok: bool,
     pub thermal_ok: bool,
+    /// Thread placement (opt-in) captured affinity restore.
+    #[serde(default)]
+    pub affinity_ok: bool,
 }
 
 impl Default for ReleaseReport {
@@ -29,13 +32,14 @@ impl Default for ReleaseReport {
             saver_ok: true,
             input_suspend_ok: true,
             thermal_ok: true,
+            affinity_ok: true,
         }
     }
 }
 
 impl ReleaseReport {
     pub fn ok(&self) -> bool {
-        self.saver_ok && self.input_suspend_ok && self.thermal_ok
+        self.saver_ok && self.input_suspend_ok && self.thermal_ok && self.affinity_ok
     }
 
     /// Machine-readable failure names for logs/diagnostics.
@@ -49,6 +53,9 @@ impl ReleaseReport {
         }
         if !self.thermal_ok {
             out.push("thermal");
+        }
+        if !self.affinity_ok {
+            out.push("affinity");
         }
         out
     }
@@ -220,6 +227,13 @@ pub struct HoldsInfo {
     pub thermal_profile: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thermal_yield: Option<i32>,
+    /// Opt-in per-app thread placement (Game-mapped apps).
+    #[serde(default)]
+    pub affinity_held: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affinity_app: Option<String>,
+    #[serde(default)]
+    pub affinity_threads: usize,
 }
 
 #[cfg(test)]

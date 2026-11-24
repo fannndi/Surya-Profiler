@@ -44,8 +44,9 @@ Compose UI ──► ViewModel ──► DynamicProfileService / DaemonLink ─�
 | `core/src/engine/thermal_*.rs` | MIUI `sconfig` decoder + `mi_thermald` dump parser |
 | `core/src/diagnose/` | `doctor` (battery/miui/env/thermal checks) |
 | `core/src/daemon/arbiter/` | pure decision table |
-| `core/src/daemon/bridge/` | saver/input-suspend/thermal holds + lifecycle |
+| `core/src/daemon/bridge/` | saver/input-suspend/thermal holds + opt-in thread placement (`affinity/`) |
 | `core/src/daemon/bridge/thermal/` | profile/paths/io/perf/map/install/select/sync/release |
+| `core/src/daemon/bridge/affinity/` | opt-in Game thread placement: rules, `/proc` scan, `taskset`, capture/restore |
 | `core/src/main.rs` | binary entry |
 | `core/src/cli.rs` + `cli/commands.rs` | CLI dispatch and one-shot commands |
 | `core/src/platform.rs` | process runner with hard timeout (output drained) |

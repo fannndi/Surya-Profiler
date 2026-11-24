@@ -13,15 +13,12 @@ assumption re-audited on:
 
 ## Status
 
-- Rust engine + daemon: **168 unit tests + 14 daemon E2E pass**, clippy/fmt clean.
-- Android app: **23 JVM tests**, builds (`app-debug.apk`) and is device-tested.
-- Device E2E: **passed 2026-11-22** for v0.7.0 (Game mapping → `sconfig=61`
-  with the raised thermal trips, Service OFF → `sconfig=0` stock restore,
-  `clean` holds released), v0.6.0 (single-writer gate, sleep→wake `core_ctl`
-  6/6, full Service OFF UI restore 18/18, force-stop/stdin-EOF restore,
-  deployed-pack/stock doctor), the 2026-11-20 v0.5.0 thermal suite and the
-  2026-11-19/20 v0.4.2 suite. Evidence:
-  Evidence: [docs/HISTORY.md](docs/HISTORY.md).
+- Rust engine + daemon: **198 unit tests + 17 daemon E2E pass**, clippy/fmt clean.
+- Android app: **24 JVM tests**, builds (`app-debug.apk`) and is device-tested.
+- Device E2E: **passed 2026-11-24** for v0.9.0 (thread placement on/off,
+  restore on leave and daemon exit; thermal corrupt-config self-repair;
+  doctor UFS health) plus the v0.8.0 floor-audit/logging run and the earlier
+  v0.7.0–0.4.2 suites. Evidence: [docs/HISTORY.md](docs/HISTORY.md).
 
 ## Features
 
@@ -31,6 +28,7 @@ assumption re-audited on:
 | Sleep | Hidden screen-off profile after a 10 s grace period. |
 | Apps Profile | Map an app to Default / Power Save / Balance / Game while it is in front. |
 | Dynamic Profile | ON = a mapped app overrides the base while it is in front; any unmapped app (including the launcher and Surya Profiler) returns to the base. OFF = base only. |
+| Thread placement | Opt-in (default OFF): while a Game-mapped app is in front, pins the Unity/Unreal main+render threads to the gold cores; restores the captured affinity on leave, screen off, lock and Service OFF. |
 | Multi-window | Split screen is forced to Balance (dumpsys window probe). |
 | MIUI saver follow | A Power Save-mapped app turns MIUI Battery Saver on; leaving restores the user value. |
 | Service | FGS + QS tile + boot receiver. ON starts the daemon; OFF restores stock. |
@@ -85,7 +83,8 @@ Compose UI ──► HomeViewModel ───────────────
   "app_map": {
     "com.android.chrome": "powersave"
   },
-  "rnd_input_suspend": false
+  "rnd_input_suspend": false,
+  "thread_affinity": false
 }
 ```
 

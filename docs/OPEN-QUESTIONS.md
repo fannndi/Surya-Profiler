@@ -157,3 +157,21 @@ Hal yang belum cukup bukti dan perlu diputuskan sebelum implementasi final.
   Chrome's renderer or game GL surfaces. Full details, harness patterns
   and per-profile verdicts:
   [RND-BATTERY-PERF-2026-11-21.md](HISTORY.md).
+
+## 14. Thread placement (Fase 6) — implemented 0.9.0, opt-in
+
+- **Implemented:** `bridge/affinity/` + `thread_affinity` config key
+  (default off). While a Game-mapped app is in front: `UnityMain`/
+  `GameThread` → cpu6–7 (`c0`), `UnityGfx*`/`RenderThread`/`RHIThread` →
+  cpu6 (`40`). Captured per-tid masks in `affinity.json`, restored on leave,
+  screen off, lock, Service OFF and daemon exit; orphans reconciled at
+  startup. Never widens a mask; if the app re-pins a thread, our record is
+  dropped and the thread is yielded for that app session (no re-pin fight).
+- **Device evidence (2026-11-24, Seven Knights):** `RenderThread` and
+  `UnityGfxDeviceW` moved to cpu6; `UnityMain` was already on 6-7 without
+  our write, so it is left alone. Leave/exit restored 4/4 captured masks and
+  cleared `affinity.json`.
+- **Open:** per-app presets/masks (the current rule table is global for
+  Game-mapped apps); an A/B power/fps run for the pin (the 0.7.0 Game
+  profile numbers still stand); games that self-pin render threads may see
+  little benefit. No new catalog/sysfs surface.

@@ -137,6 +137,7 @@ impl Runtime {
             profile,
             custom_thermal: cfg.custom_thermal,
             rnd_input_suspend: cfg.rnd_input_suspend,
+            thread_affinity: cfg.thread_affinity,
         }
     }
 

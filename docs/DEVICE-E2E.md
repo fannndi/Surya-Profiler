@@ -24,6 +24,12 @@ MIUI 14, root APatch.
 - [ ] Split screen → Balance.
 - [ ] MIUI saver follows a Power Save-mapped app, then restores the user value.
 - [ ] R&D input-suspend ON → node `1`; Service OFF → `0`.
+- [ ] Thread placement ON (Settings → Advanced) + a Game-mapped app in front:
+      `UnityMain`/`UnityGfx*` show the pinned `Cpus_allowed_list`
+      (`6-7` / `6`), other threads untouched; leave the app → all restored;
+      Service OFF → restored again and `restored.affinity_ok=true`.
+- [ ] Thread placement OFF → no `taskset` calls (log/strace) and no
+      `affinity.json` entries.
 - [ ] Service OFF (UI + notification action): `sconfig=0`, map/marker gone,
       `holds.json` all false, engine restore `18/18` (count depends on the
       installed pack), charging untouched.

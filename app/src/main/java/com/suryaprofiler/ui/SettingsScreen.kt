@@ -51,6 +51,8 @@ fun SettingsScreen(
     onCustomThermal: (Boolean) -> Unit,
     freqFloorAudit: Boolean,
     onFreqFloorAudit: (Boolean) -> Unit,
+    threadAffinity: Boolean,
+    onThreadAffinity: (Boolean) -> Unit,
     rndInputSuspend: Boolean,
     onRndInputSuspend: (Boolean) -> Unit,
     onBack: () -> Unit,
@@ -158,6 +160,22 @@ fun SettingsScreen(
                         Switch(
                             checked = freqFloorAudit,
                             onCheckedChange = onFreqFloorAudit,
+                        )
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Thread placement", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "Pins the main/render threads (Unity/Unreal) of Game-mapped " +
+                                    "apps to the big cores while they are in front. Restored on " +
+                                    "leave, screen off, lock and Service OFF. Experimental.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = threadAffinity,
+                            onCheckedChange = onThreadAffinity,
                         )
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

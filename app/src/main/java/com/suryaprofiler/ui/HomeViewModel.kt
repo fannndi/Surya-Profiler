@@ -69,10 +69,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
-        // combine() caps at 5 flows: the audit toggle gets its own collector.
+        // combine() caps at 5 flows: these toggles get their own collectors.
         viewModelScope.launch {
             config.freqFloorAuditFlow.collect { v ->
                 _state.update { it.copy(freqFloorAudit = v) }
+            }
+        }
+        viewModelScope.launch {
+            config.threadAffinityFlow.collect { v ->
+                _state.update { it.copy(threadAffinity = v) }
             }
         }
         viewModelScope.launch {

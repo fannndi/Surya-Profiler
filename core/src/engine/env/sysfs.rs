@@ -11,6 +11,19 @@ pub fn default_root() -> PathBuf {
     PathBuf::from("/")
 }
 
+/// Read-only UFS health (`0x06` life estimate, `0x01` EOL) for diagnostics.
+/// Missing/permission-denied nodes return `None`; this is never a write.
+pub fn storage_health() -> (Option<String>, Option<String>) {
+    let base = default_root().join("sys/devices/platform/soc/1d84000.ufshc/health_descriptor");
+    let read = |name: &str| {
+        fs::read_to_string(base.join(name))
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+    (read("life_time_estimation_a"), read("eol_info"))
+}
+
 /// Cooling-device state files resolved once at startup.
 pub(crate) struct CoolingPaths {
     pub(crate) cur: PathBuf,

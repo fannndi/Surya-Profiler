@@ -15,7 +15,8 @@ import java.io.File
  *
  * Schema 2 is deliberately tiny: service flags, the universal base, the
  * per-app Device-Profile mapping, the automatic thermal takeover, the R&D
- * input-suspend switch and the crash-recovery `restore_pending` marker.
+ * input-suspend switch, the opt-in Game thread placement and the
+ * crash-recovery `restore_pending` marker.
  *
  * Ownership: the app is the SINGLE writer; the Rust daemon reads the file
  * (start, `config_changed` hint, mtime fallback). Writes are atomic
@@ -73,6 +74,13 @@ class DynamicProfileConfig private constructor(context: Context) {
     var freqFloorAudit: Boolean
         get() = _freqFloorAudit.value
         set(v) { put { it.put("freq_floor_audit", v) } }
+
+    /** Opt-in thread placement for apps mapped to Game. */
+    private val _threadAffinity = MutableStateFlow(false)
+    val threadAffinityFlow: StateFlow<Boolean> = _threadAffinity
+    var threadAffinity: Boolean
+        get() = _threadAffinity.value
+        set(v) { put { it.put("thread_affinity", v) } }
 
     /** A Service OFF was started but not confirmed yet (crash recovery). */
     private val _restorePending = MutableStateFlow(false)
@@ -176,6 +184,7 @@ class DynamicProfileConfig private constructor(context: Context) {
         _rndInputSuspend.value = cfg.rndInputSuspend
         _restorePending.value = cfg.restorePending
         _freqFloorAudit.value = cfg.freqFloorAudit
+        _threadAffinity.value = cfg.threadAffinity
     }
 
     /**

@@ -45,6 +45,11 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
     let bridge = Bridge::recover(state_dir, publisher.clone(), Some(flags.clone()));
     let initial_active = Store::new(state_dir).load_state().active;
 
+    // A SIGKILL cannot run the exit restore. Undo any thread placement left
+    // by the previous run before the first decision; the first sync will
+    // re-apply it if the game is still foreground and the switch is on.
+    bridge.reconcile_orphan_affinity();
+
     // R&D input-suspend is app-only and stock 0. If a crash lost holds.json
     // while the node stayed at 1, release it before the first decision.
     if !cfg.get().rnd_input_suspend && !bridge.holds_info().input_suspend_held {

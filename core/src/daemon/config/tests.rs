@@ -112,6 +112,16 @@ fn rnd_switch_roundtrips() {
 }
 
 #[test]
+fn thread_affinity_is_opt_in() {
+    let c = DaemonConfig::default();
+    assert!(!c.thread_affinity, "thread placement must default off");
+    let c: DaemonConfig = serde_json::from_str(r#"{"thread_affinity":true}"#).unwrap();
+    assert!(c.thread_affinity);
+    let c: DaemonConfig = serde_json::from_str(r#"{"app_map":{"com.g":"game"}}"#).unwrap();
+    assert!(!c.thread_affinity, "missing key stays off");
+}
+
+#[test]
 fn load_missing_file_fails_closed() {
     let dir = tmpdir("cfg-missing");
     let (cfg, err) = ConfigFile::load(&dir.join("config.json"));

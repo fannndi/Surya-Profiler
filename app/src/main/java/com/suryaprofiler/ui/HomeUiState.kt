@@ -35,6 +35,8 @@ data class HomeUiState(
     val customThermal: Boolean = true,
     /** Freq floor audit sentinel (auto re-assert of a drifted CPU floor). */
     val freqFloorAudit: Boolean = true,
+    /** Opt-in thread placement for apps mapped to Game. */
+    val threadAffinity: Boolean = false,
     /** R&D: suspend charger input while the service is on. */
     val rndInputSuspend: Boolean = false,
     val mappedCount: Int = 0,

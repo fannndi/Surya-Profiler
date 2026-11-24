@@ -56,6 +56,30 @@ internal fun fmtUptime(s: Long): String = when {
     else -> "${s / 3600}h ${(s % 3600) / 60}m"
 }
 
+/** UFS raw hex -> "used 50–60% · eol <80%". Unknown/missing stays "—". */
+internal fun fmtStorageHealth(life: String?, eol: String?): String {
+    val lifeLabels = arrayOf(
+        "unknown", "0–10%", "10–20%", "20–30%", "30–40%", "40–50%",
+        "50–60%", "60–70%", "70–80%", "80–90%", "90–100%",
+    )
+    val lifeText = life?.removePrefix("0x")?.toIntOrNull(16)?.let { v ->
+        when {
+            v in 1..10 -> lifeLabels[v]
+            v >= 0x0B -> "exceeded"
+            else -> "unknown"
+        }
+    } ?: "—"
+    val eolText = eol?.removePrefix("0x")?.toIntOrNull(16)?.let { v ->
+        when (v) {
+            1 -> "<80% reserved"
+            2 -> "≈80% reserved"
+            3 -> ">90% reserved"
+            else -> "unknown"
+        }
+    } ?: "—"
+    return "used $lifeText · eol $eolText"
+}
+
 private val timeFormat = ThreadLocal.withInitial {
     SimpleDateFormat("HH:mm", Locale.US)
 }

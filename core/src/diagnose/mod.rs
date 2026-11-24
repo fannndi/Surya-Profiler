@@ -137,6 +137,19 @@ pub fn run(state_dir: &Path, config_path: Option<&Path>, fix_thermal: bool) -> (
     thermal_checks::run(&mut r, &root);
     thermal_files::run(&mut r, fix_thermal);
 
+    // --- UFS health (informational, read-only) ---------------------------------
+    let (storage_life, storage_eol) = crate::engine::env::storage_health();
+    r.check(
+        "storage_health",
+        storage_life.is_some() || storage_eol.is_some(),
+        false,
+        json!({
+            "life_time_estimation_a": storage_life,
+            "eol_info": storage_eol,
+            "hint": "0x06 = 50–60% life used; eol 0x01 = <80% reserved blocks consumed",
+        }),
+    );
+
     // --- MIUI background readiness (informational) ------------------------------
     let (whitelist_ok, whitelist_detail) = battery_whitelist_check();
     r.check("battery_whitelist", whitelist_ok, false, whitelist_detail);

@@ -134,6 +134,11 @@ internal fun HomeViewModel.onFreqFloorAudit(v: Boolean) {
     viewModelScope.launch(Dispatchers.IO) { config.freqFloorAudit = v }
 }
 
+/** Opt-in thread placement: pure config write, daemon picks it up. */
+internal fun HomeViewModel.onThreadAffinity(v: Boolean) {
+    viewModelScope.launch(Dispatchers.IO) { config.threadAffinity = v }
+}
+
 /** R&D switch: daemon-owned, auto-released on Service OFF. */
 internal fun HomeViewModel.onRndInputSuspend(v: Boolean) {
     if (!_state.value.serviceRunning) return

@@ -45,11 +45,12 @@ disabled. `restore` closes the bridge gate immediately.
 | `pong` | — | reply to `ping` |
 | `bye` | — | graceful exit |
 
-`restored.ok` is true only when the engine restore **and all holds** succeeded.
-`applied.ok` is false when a real device had zero written/unchanged keys and
-every key was locked; `applied` distinguishes a real apply from a fully locked
-profile. Host simulations (`SURYAPROFILER_DEBUG=1`, no device nodes) keep the
-all-missing case successful.
+`restored.ok` is true only when the engine restore **and all holds** succeeded
+(saver, input-suspend, thermal, thread placement). `applied.ok` is false when
+a real device had zero written/unchanged keys and every key was locked;
+`applied` distinguishes a real apply from a fully locked profile. Host
+simulations (`SURYAPROFILER_DEBUG=1`, no device nodes) keep the all-missing
+case successful.
 
 Unknown commands are logged and ignored. Unknown events are non-fatal and
 parsed as `DaemonEvent.Unknown`.
@@ -57,12 +58,11 @@ parsed as `DaemonEvent.Unknown`.
 ## Diagnostics payload
 
 `diag.diag` carries the config, env snapshot, watchers, holds, the newest
-`thermal_events`, `miui_sp_game` and `recent_logs` — the last ~120 daemon
+`thermal_events`, `miui_sp_game`, storage health (`storage_life`,
+`storage_eol`, raw UFS hex) and `recent_logs` — the last ~120 daemon
 log lines (oldest first, `<utc> <tag> [component] message`; `tag`
-E/W/I/D). The app seeds its log view from it when its stderr relay has
-nothing yet; `surya-prof log [--last N] [--level L] [--follow]` reads the
-durable file (`<state_dir>/logs/daemon.log`, rotated at 512 KB with one
-generation kept).
+E/W/I/D). The `holds` object also exposes `affinity_held`, `affinity_app`
+and `affinity_threads` for the opt-in thread placement.
 
 ## Config keys (schema 2)
 
@@ -73,4 +73,5 @@ generation kept).
 | `app_map` | `{}` | package → profile (user profiles only) |
 | `rnd_input_suspend` | false | R&D: suspend charger input while the service runs |
 | `freq_floor_audit` | true | re-assert the profile CPU floor when an external writer pins it high (yields to MIUI performance mode; backs off 30 s→300 s when a re-assert does not stick) |
+| `thread_affinity` | false | opt-in Game thread placement: pin Unity/Unreal main+render threads while a Game-mapped app is foreground; restore on leave/screen-off/lock/Service OFF |
 | `log_level` | (env) | `error`/`warn`/`info`/`debug`; the env var `SURYAPROFILER_LOG` seeds the default, a config `log_level` (when present) overrides it — applied live on every config reload |

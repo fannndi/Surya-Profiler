@@ -31,6 +31,8 @@ pub struct SyncCtx {
     pub custom_thermal: bool,
     /// R&D-only global charger-input suspend.
     pub rnd_input_suspend: bool,
+    /// Opt-in thread placement for apps mapped to Game.
+    pub thread_affinity: bool,
 }
 
 impl Bridge {

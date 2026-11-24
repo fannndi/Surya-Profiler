@@ -24,9 +24,10 @@ are preserved across MIUI updates; the hardcoded map is only a host/fallback.
 
 Rules:
 
-- `SS`/GPU steps use `nvm-therm-adc` **directly**. MIUI's `VIRTUAL-SENSOR`
-  is rejected by `check_sensor_valid` on this boot and cannot drive the
-  cpufreq cooling devices.
+- `SS`/GPU steps use `nvm-therm-adc` **directly**. The vendor config wraps
+  the same sensor in a weight-1 `[VIRTUAL-SENSOR]`; a config that references
+  `VIRTUAL-SENSOR` must define it (vendor does). Pointing at `nvm-therm-adc`
+  directly is equivalent on surya and avoids a redundant alias.
 - Keep big-cluster targets at/above the 1 843 200 kHz **live boost** floor and
   little-cluster targets at/above 1 612 800 kHz; lower values are clamped when
   the boost is active. The floor is interaction-scoped (wake/touch), so these
