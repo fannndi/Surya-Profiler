@@ -64,6 +64,7 @@ internal fun SuggestedGames(games: List<AppEntry>, onMap: (AppEntry) -> Unit) {
 internal fun AppRow(
     app: AppEntry,
     mapped: String?,
+    downscale: String? = null,
     onClick: () -> Unit,
 ) {
     Row(
@@ -119,6 +120,16 @@ internal fun AppRow(
                             color = MaterialTheme.colorScheme.onTertiaryContainer,
                         )
                     }
+                }
+            }
+            downscale?.let { ratio ->
+                val pct = (ratio.toFloatOrNull()?.times(100))?.toInt()
+                if (pct != null) {
+                    Text(
+                        "Render scale $pct%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }

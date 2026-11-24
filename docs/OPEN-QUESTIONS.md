@@ -175,3 +175,21 @@ Hal yang belum cukup bukti dan perlu diputuskan sebelum implementasi final.
   Game-mapped apps); an A/B power/fps run for the pin (the 0.7.0 Game
   profile numbers still stand); games that self-pin render threads may see
   little benefit. No new catalog/sysfs surface.
+
+## 15. Render scale / display scale — implemented 0.10.0
+
+- **Per-app render scale:** `cmd game downscale` hold, prior capture from
+  `dumpsys platform_compat`, restored on unmap/Service OFF/exit. Device
+  verified 0.8 on Seven Knights (`mCompatFrame=864×1920`), 0.65 layout test
+  on Chrome (`inner` unchanged, DPR 2.5→1.625).
+- **Global display scale:** exact 20:9 presets; `hd` = 720×1600 @320
+  (vendor 720p density), `hd-compact` = 720×1600 @267 (same 431dp layout as
+  native 400/1080); exact original size/density restored on Off/Service OFF.
+  Device verified `hd` and combined 576×1280; restore to 1080×2400 @400.
+- **Power R&D (60 s):** GPU-bound Chrome stress −29% at native+0.65 and −41%
+  at 720p+0.8; Seven Knights −27% at native+0.8 and −36% at 720p; TikTok
+  neutral (GPU ~8%→4%, decode/network/panel dominated).
+- **Open:** 3–5 min A/B for the shipped ratios; MIUI Game Turbo can write a
+  different downscale (foreground re-check re-asserts); global display
+  reboot/persistence needs a device run; per-app 65/70 choice for video apps
+  is user preference, not a guaranteed battery win.

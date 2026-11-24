@@ -2,6 +2,7 @@ package com.suryaprofiler.ui
 
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -53,6 +55,8 @@ fun SettingsScreen(
     onFreqFloorAudit: (Boolean) -> Unit,
     threadAffinity: Boolean,
     onThreadAffinity: (Boolean) -> Unit,
+    displayScale: String,
+    onDisplayScale: (String) -> Unit,
     rndInputSuspend: Boolean,
     onRndInputSuspend: (Boolean) -> Unit,
     onBack: () -> Unit,
@@ -194,6 +198,44 @@ fun SettingsScreen(
                             onCheckedChange = onRndInputSuspend,
                             enabled = serviceRunning,
                         )
+                    }
+                }
+            }
+
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Display scale (system-wide)", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Exact 20:9 presets (wm size + density). Applies to SystemUI and " +
+                            "every app; Service OFF restores your exact size/density. Per-app " +
+                            "render scale still applies on top.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val displayOptions = listOf(
+                        "off" to "Off (native 1080×2400)",
+                        "80" to "80% · 864×1920",
+                        "75" to "75% · 810×1800",
+                        "70" to "70% · 756×1680",
+                        "hd" to "HD 720p · larger UI (density 320)",
+                        "hd-compact" to "HD 720p · same layout (density 267)",
+                        "60" to "60% · 648×1440",
+                        "50" to "50% · 540×1200",
+                    )
+                    displayOptions.forEach { (id, label) ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onDisplayScale(id) }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = displayScale == id,
+                                onClick = { onDisplayScale(id) },
+                            )
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
                 }
             }

@@ -30,6 +30,19 @@ MIUI 14, root APatch.
       Service OFF → restored again and `restored.affinity_ok=true`.
 - [ ] Thread placement OFF → no `taskset` calls (log/strace) and no
       `affinity.json` entries.
+- [ ] Per-app render scale: map a Game app to 80%; check `mCompatFrame`
+      (e.g. 864×1920 at native, `mGlobalScale=1.25`) while `mFrame` stays
+      native; aspect ratio/layout unchanged; Service OFF → `disable` and
+      `downscale_ok=true`.
+- [ ] Render scale prior capture: set 0.8 on a package via `cmd game
+      downscale 0.8 <pkg>`, then configure 0.7; Service OFF must restore 0.8.
+- [ ] Global display scale: preset `hd` (720×1600 @320); `wm size`/density
+      read back; SystemUI/apps relayout; exact restore 1080×2400 @400 on Off.
+      Check `hd-compact` (267) and 80% (864×1920 @320) too.
+- [ ] Combination: `hd` + game 80% → `mCompatFrame=576×1280`, aspect 20:9;
+      Service OFF restores both (`display_ok`/`downscale_ok`).
+- [ ] Reboot while render/display holds are active; daemon reconciles, Service
+      OFF restores; `downscale.json`/`display.json` empty afterwards.
 - [ ] Service OFF (UI + notification action): `sconfig=0`, map/marker gone,
       `holds.json` all false, engine restore `18/18` (count depends on the
       installed pack), charging untouched.

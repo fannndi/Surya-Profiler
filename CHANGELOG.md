@@ -4,6 +4,49 @@
 > (`EVIDENCE-DEVICE`, `EVIDENCE-THERMAL`, `HISTORY`, `OPEN-QUESTIONS`);
 > older entries below still name the original paths.
 
+## 0.10.0 — 2026-11-24 (per-app render scale + optional display scale)
+
+- **Per-app render scale (opt-in, default OFF).** Uses the Android 12
+  GameManagerService shell interface (`cmd game downscale <ratio> <pkg>`)
+  through `bridge/downscale/`: the app renders into a uniformly smaller
+  buffer while its dp layout, aspect ratio and density stay unchanged (only
+  DPR shrinks; verified with Chrome: `inner=432x815`, DPR 2.5→1.25 at 0.5,
+  `mCompatFrame=540x1200`, `mGlobalScale=2.0`). Captures the prior
+  PlatformCompat override from `dumpsys platform_compat` and restores it on
+  unmap/Service OFF/exit (`downscale.json`, `downscale_ok`). Persistent while
+  Service ON so apps start already scaled (a live change can relaunch
+  Chrome); a foreground re-check re-asserts MIUI Game Turbo drift.
+- **Optional global display scale (default OFF).** `bridge/display/` sets
+  exact 20:9 `wm size` + density presets (80/75/70/HD 720p standard/HD
+  compact/60/50), captures the user's exact size/density overrides (this
+  device: no size override, density 400), and restores them on Off/Service
+  OFF/exit (`display.json`, `display_ok`). `hd` = 720x1600 @320 (vendor 720p
+  density, larger/readable UI), `hd-compact` = 720x1600 @267 (same 431dp
+  layout as native 400/1080).
+- **R&D evidence (60 s samples, brightness 400, 60Hz, input_suspend):**
+  Chrome WebGL stress 2209.6→1564.0 mW (−29%) with native+0.65, and
+  2209.6→1309.8 mW (−41%) with 720p+0.8; Seven Knights
+  2781.1→2039.3 mW (−27%, native+0.8) and 2781.1→1789.3 mW (−36%, 720p).
+  TikTok was neutral (1911.8→1912.8 mW; GPU ~8%→4.4%): video decode/network/
+  panel dominate, so render scale is not a doomscrolling power fix. Density
+  is a UI-scale knob, not a performance knob (720p buffer is 720x1600 at any
+  density).
+- **UI:** Apps Profile bottom sheet gains “Render scale” (Off/90/80/75/70/
+  65/60/55/50) with the effective buffer size and app-row badge; Settings
+  gains “Display scale (system-wide)” with the exact presets and a warning.
+- **Config:** schema-2 additive `app_downscale` map and `display_scale`
+  string; `downscale_ok`/`display_ok` in `restored`; diag holds expose
+  downscale/display state.
+- Host: unit tests (ratio canonicalization, PlatformCompat parser, 20:9
+  presets, wm parser) + 2 daemon E2E (downscale capture/apply/restore with
+  prior 0.8; display apply/Off exact density restore).
+- Device E2E (surya, 2026-11-24): Seven Knights with per-app 0.8 reports
+  `mCompatFrame=864x1920` / `mGlobalScale=1.25` while `mFrame` stays
+  `1080x2400`; display `hd` sets `wm size 720x1600` + density 320 and the
+  combo reports `mFrame=720x1600` / `mCompatFrame=576x1280`; force-stop exit
+  restores `wm` 1080x2400 @400, `cmd game downscale disable`, empty state
+  files and `downscale_ok/display_ok=true`.
+
 ## 0.9.0 — 2026-11-24 (opt-in thread placement + reference hardening)
 
 - **Thread placement (Fase 6, default OFF).** While an app mapped to

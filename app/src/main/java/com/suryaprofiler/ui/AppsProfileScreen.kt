@@ -2,6 +2,7 @@ package com.suryaprofiler.ui
 
 import com.suryaprofiler.core.ProfileLabels
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,6 +23,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,9 +40,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.suryaprofiler.protocol.ProfileId
+import kotlin.math.roundToInt
 
 /**
  * Apps Profile: search + filter, tap an app, choose its Device Profile.
@@ -50,6 +55,7 @@ import com.suryaprofiler.protocol.ProfileId
 fun AppsProfileScreen(vm: DynamicProfileViewModel, onBack: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val appMap by vm.appMap.collectAsStateWithLifecycle()
+    val appDownscale by vm.appDownscale.collectAsStateWithLifecycle()
     var pickerFor by remember { mutableStateOf<AppEntry?>(null) }
     var filter by remember { mutableStateOf(AppFilter.ALL) }
 
@@ -125,6 +131,7 @@ fun AppsProfileScreen(vm: DynamicProfileViewModel, onBack: () -> Unit) {
                         AppRow(
                             app = app,
                             mapped = appMap[app.pkg],
+                            downscale = appDownscale[app.pkg],
                             onClick = { pickerFor = app },
                         )
                     }
@@ -168,10 +175,67 @@ fun AppsProfileScreen(vm: DynamicProfileViewModel, onBack: () -> Unit) {
                         Text(label, style = MaterialTheme.typography.bodyLarge)
                     }
                 }
+
+                if (app.pkg !in RENDER_SCALE_PROTECTED) {
+                HorizontalDivider(Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                Column(Modifier.padding(horizontal = 20.dp)) {
+                    Text(
+                        "Render scale (app buffer)",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        "Android per-app downscale: aspect ratio and layout stay the " +
+                            "same, only the render buffer shrinks. Video decode may not " +
+                            "drop. Restored on Service OFF.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    val dm = LocalContext.current.resources.displayMetrics
+                    val current = appDownscale[app.pkg]
+                    val pct = current?.toFloatOrNull()?.times(100)?.roundToInt()
+                    val effective = if (pct == null) {
+                        "${dm.widthPixels} × ${dm.heightPixels} (native)"
+                    } else {
+                        val w = (dm.widthPixels * pct / 100.0).roundToInt()
+                        val h = (dm.heightPixels * pct / 100.0).roundToInt()
+                        "$w × $h ($pct%)"
+                    }
+                    Text(
+                        "Effective app buffer: $effective",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+                    ) {
+                        listOf<String?>(null, "0.9", "0.8", "0.75", "0.7", "0.65", "0.6", "0.55", "0.5")
+                            .forEach { ratio ->
+                                val label = ratio?.let {
+                                    "${(it.toFloat() * 100).roundToInt()}%"
+                                } ?: "Off"
+                                FilterChip(
+                                    selected = current == ratio,
+                                    onClick = { vm.setAppDownscale(app.pkg, ratio) },
+                                    label = { Text(label) },
+                                )
+                            }
+                    }
+                }
+                }
             }
         }
     }
 }
+
+private val RENDER_SCALE_PROTECTED = setOf(
+    "android",
+    "com.android.systemui",
+    "com.miui.home",
+    "com.suryaprofiler",
+)
 
 private enum class AppFilter(val label: String) {
     ALL("All"),

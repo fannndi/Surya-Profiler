@@ -17,6 +17,10 @@ data class AppConfig(
     val freqFloorAudit: Boolean = true,
     /** Opt-in thread placement for apps mapped to Game (default off). */
     val threadAffinity: Boolean = false,
+    /** Per-app render scale (`cmd game downscale`); canonical ratio strings. */
+    val appDownscale: Map<String, String> = emptyMap(),
+    /** Optional system-wide display preset (`off`, `hd`, `80`, ...). */
+    val displayScale: String = "off",
     /** Daemon log level (error|warn|info|debug); null = env/default. */
     val logLevel: String? = null,
 )
@@ -63,6 +67,14 @@ object ConfigCodec {
             restorePending = json.optBoolean("restore_pending", false),
             freqFloorAudit = json.optBoolean("freq_floor_audit", true),
             threadAffinity = json.optBoolean("thread_affinity", false),
+            appDownscale = json.optJSONObject("app_downscale")?.let { obj ->
+                buildMap {
+                    obj.keys().forEach { pkg ->
+                        obj.optString(pkg).takeIf { it.isNotBlank() }?.let { put(pkg, it) }
+                    }
+                }
+            } ?: emptyMap(),
+            displayScale = json.optString("display_scale", "off").ifBlank { "off" },
             logLevel = json.strOrNull("log_level"),
         )
     }
@@ -80,5 +92,9 @@ object ConfigCodec {
         .put("restore_pending", config.restorePending)
         .put("freq_floor_audit", config.freqFloorAudit)
         .put("thread_affinity", config.threadAffinity)
+        .put("app_downscale", JSONObject().also { out ->
+            for ((pkg, ratio) in config.appDownscale) out.put(pkg, ratio)
+        })
+        .put("display_scale", config.displayScale)
         .putOpt("log_level", config.logLevel)
 }

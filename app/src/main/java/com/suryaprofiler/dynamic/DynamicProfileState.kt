@@ -33,6 +33,10 @@ data class RestoredEvent(
     val failed: Int,
     /** Opt-in thread placement restore succeeded (additive, default true). */
     val affinityOk: Boolean = true,
+    /** Per-app render-scale restore succeeded. */
+    val downscaleOk: Boolean = true,
+    /** Global display preset restore succeeded. */
+    val displayOk: Boolean = true,
 )
 
 /**

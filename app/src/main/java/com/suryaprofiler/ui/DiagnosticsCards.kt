@@ -76,6 +76,14 @@ internal fun DaemonCard(diag: DiagInfo?) {
             },
         )
         KV(
+            "Render scale",
+            if (diag.downscaleHeld) "${diag.downscaleApps} app(s) held" else "—",
+        )
+        KV(
+            "Display scale",
+            if (diag.displayHeld) diag.displayPreset ?: "held" else "native",
+        )
+        KV(
             "Storage health",
             fmtStorageHealth(diag.storageLife, diag.storageEol),
         )

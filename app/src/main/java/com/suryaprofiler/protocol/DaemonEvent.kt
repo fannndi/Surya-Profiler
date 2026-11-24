@@ -30,6 +30,8 @@ sealed interface DaemonEvent {
         val inputSuspendOk: Boolean,
         val thermalOk: Boolean,
         val affinityOk: Boolean,
+        val downscaleOk: Boolean,
+        val displayOk: Boolean,
     ) : DaemonEvent
 
     data class Env(val env: EnvSnapshot) : DaemonEvent
@@ -111,6 +113,8 @@ sealed interface DaemonEvent {
                 inputSuspendOk = json.optBoolean("input_suspend_ok", true),
                 thermalOk = json.optBoolean("thermal_ok", true),
                 affinityOk = json.optBoolean("affinity_ok", true),
+                downscaleOk = json.optBoolean("downscale_ok", true),
+                displayOk = json.optBoolean("display_ok", true),
             )
 
             "env" -> Env(DiagnosticsParse.env(json))

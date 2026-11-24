@@ -13,12 +13,13 @@ assumption re-audited on:
 
 ## Status
 
-- Rust engine + daemon: **198 unit tests + 17 daemon E2E pass**, clippy/fmt clean.
+- Rust engine + daemon: **211 unit tests + 19 daemon E2E pass**, clippy/fmt clean.
 - Android app: **24 JVM tests**, builds (`app-debug.apk`) and is device-tested.
-- Device E2E: **passed 2026-11-24** for v0.9.0 (thread placement on/off,
-  restore on leave and daemon exit; thermal corrupt-config self-repair;
-  doctor UFS health) plus the v0.8.0 floor-audit/logging run and the earlier
-  v0.7.0–0.4.2 suites. Evidence: [docs/HISTORY.md](docs/HISTORY.md).
+- Device E2E: **passed 2026-11-24** for v0.10.0 (per-app 0.8 render scale
+  with `mCompatFrame=864×1920`, display `hd` 720p/320 with exact
+  density-400 restore, combined 576×1280, force-stop exit restore), v0.9.0
+  (thread placement, thermal repair, UFS health), v0.8.0 (floor audit/logs)
+  and the earlier suites. Evidence: [docs/HISTORY.md](docs/HISTORY.md).
 
 ## Features
 
@@ -29,6 +30,8 @@ assumption re-audited on:
 | Apps Profile | Map an app to Default / Power Save / Balance / Game while it is in front. |
 | Dynamic Profile | ON = a mapped app overrides the base while it is in front; any unmapped app (including the launcher and Surya Profiler) returns to the base. OFF = base only. |
 | Thread placement | Opt-in (default OFF): while a Game-mapped app is in front, pins the Unity/Unreal main+render threads to the gold cores; restores the captured affinity on leave, screen off, lock and Service OFF. |
+| Render scale | Opt-in per app: Android 12 per-app buffer downscale (`cmd game downscale`). Aspect ratio and dp layout stay unchanged (only DPR/buffer shrinks); restores the captured prior override on unmap/Service OFF. Great for GPU-bound games; video decode may not drop. |
+| Display scale | Optional system-wide exact 20:9 presets (`wm size` + density): 80/75/70/HD 720p standard/HD compact/60/50. Captures the user's exact size/density and restores it on Service OFF. Default OFF. |
 | Multi-window | Split screen is forced to Balance (dumpsys window probe). |
 | MIUI saver follow | A Power Save-mapped app turns MIUI Battery Saver on; leaving restores the user value. |
 | Service | FGS + QS tile + boot receiver. ON starts the daemon; OFF restores stock. |
@@ -84,7 +87,9 @@ Compose UI ──► HomeViewModel ───────────────
     "com.android.chrome": "powersave"
   },
   "rnd_input_suspend": false,
-  "thread_affinity": false
+  "thread_affinity": false,
+  "app_downscale": { "com.netmarble.skiagb": "0.8" },
+  "display_scale": "off"
 }
 ```
 

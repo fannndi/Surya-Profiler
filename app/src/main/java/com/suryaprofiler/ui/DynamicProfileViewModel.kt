@@ -37,6 +37,7 @@ class DynamicProfileViewModel(app: Application) : AndroidViewModel(app) {
     private val config = DynamicProfileConfig.get(app)
 
     val appMap: StateFlow<Map<String, String>> = config.appMapFlow
+    val appDownscale: StateFlow<Map<String, String>> = config.appDownscaleFlow
 
     private val _state = MutableStateFlow(DynamicProfileUiState())
     val state: StateFlow<DynamicProfileUiState> = _state.asStateFlow()
@@ -51,6 +52,13 @@ class DynamicProfileViewModel(app: Application) : AndroidViewModel(app) {
     fun setAppProfile(pkg: String, profileId: String?) {
         viewModelScope.launch(Dispatchers.IO) {
             config.setAppProfile(pkg, profileId)
+        }
+    }
+
+    /** null/blank clears the per-app render scale. */
+    fun setAppDownscale(pkg: String, ratio: String?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            config.setAppDownscale(pkg, ratio)
         }
     }
 

@@ -8,10 +8,10 @@ impl Bridge {
         self.blocked.store(true, Ordering::Release);
     }
 
-    /// True when `holds.json` or `affinity.json` has any active state.
+    /// True when `holds.json` or any side hold has active state.
     pub(crate) fn has_holds(&self) -> bool {
         let st = self.lock();
-        st.holds.any_held() || st.affinity.managed()
+        st.holds.any_held() || st.affinity.managed() || st.downscale.active() || st.display.active()
     }
 
     /// One full sync: MIUI saver follow, R&D input suspend, thermal profile,
@@ -23,7 +23,14 @@ impl Bridge {
     /// before the release (and is then undone by it) or observes the gate and
     /// returns without touching the device.
     pub(crate) fn sync(&self, ctx: &SyncCtx) {
-        let (saver_changed, input_suspend_changed, thermal_changed, affinity_changed) = {
+        let (
+            saver_changed,
+            input_suspend_changed,
+            thermal_changed,
+            affinity_changed,
+            downscale_changed,
+            display_changed,
+        ) = {
             let mut st = self.lock();
             if self.blocked.load(Ordering::Acquire) || !ctx.enabled {
                 return;
@@ -32,11 +39,15 @@ impl Bridge {
             let input_suspend_changed = self.sync_input_suspend(&mut st, ctx);
             let thermal_changed = self.sync_thermal(&mut st, ctx);
             let affinity_changed = affinity::sync(&mut st.affinity, ctx);
+            let downscale_changed = downscale::sync_ctx(&mut st.downscale, ctx);
+            let display_changed = display::sync_ctx(&mut st.display, ctx);
             (
                 saver_changed,
                 input_suspend_changed,
                 thermal_changed,
                 affinity_changed,
+                downscale_changed,
+                display_changed,
             )
         };
         if saver_changed || input_suspend_changed || thermal_changed {
@@ -47,6 +58,14 @@ impl Bridge {
         if affinity_changed {
             let st = self.lock();
             self.persist_affinity(&st);
+        }
+        if downscale_changed {
+            let st = self.lock();
+            self.persist_downscale(&st);
+        }
+        if display_changed {
+            let st = self.lock();
+            self.persist_display(&st);
         }
     }
 
@@ -59,6 +78,8 @@ impl Bridge {
         let mut report = ReleaseReport::default();
         let mut changed = false;
         let mut affinity_changed = false;
+        let mut downscale_changed = false;
+        let mut display_changed = false;
         {
             let mut st = self.lock();
             self.blocked.store(true, Ordering::Release);
@@ -114,6 +135,22 @@ impl Bridge {
                     self.log_event(format!("thread placement release failed: {e}"));
                 }
             }
+
+            match downscale::release(&mut st.downscale) {
+                Ok(released) => downscale_changed = released,
+                Err(e) => {
+                    report.downscale_ok = false;
+                    self.log_event(format!("render-scale release failed: {e}"));
+                }
+            }
+
+            match display::release(&mut st.display) {
+                Ok(released) => display_changed = released,
+                Err(e) => {
+                    report.display_ok = false;
+                    self.log_event(format!("display-scale release failed: {e}"));
+                }
+            }
         }
         if changed {
             self.refresh_attribution();
@@ -123,6 +160,14 @@ impl Bridge {
         if affinity_changed {
             let st = self.lock();
             self.persist_affinity(&st);
+        }
+        if downscale_changed {
+            let st = self.lock();
+            self.persist_downscale(&st);
+        }
+        if display_changed {
+            let st = self.lock();
+            self.persist_display(&st);
         }
         if report.ok() {
             self.log_event("all holds released".into());

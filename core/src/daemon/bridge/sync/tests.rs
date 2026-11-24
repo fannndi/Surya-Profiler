@@ -17,6 +17,8 @@ fn ctx(pairs: &[(&str, &str)], fg: Option<&str>) -> SyncCtx {
         custom_thermal: false,
         rnd_input_suspend: false,
         thread_affinity: false,
+        app_downscale: std::collections::BTreeMap::new(),
+        display_scale: "off".into(),
     }
 }
 

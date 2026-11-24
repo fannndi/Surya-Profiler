@@ -97,6 +97,8 @@ class DaemonEventRouter(
                     verified = event.verified,
                     failed = event.failed,
                     affinityOk = event.affinityOk,
+                    downscaleOk = event.downscaleOk,
+                    displayOk = event.displayOk,
                 ),
             )
 

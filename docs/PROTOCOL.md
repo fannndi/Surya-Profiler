@@ -36,7 +36,7 @@ disabled. `restore` closes the bridge gate immediately.
 | `hello` | `version`, `pid` | first event after startup |
 | `state` | `state` object (`screen_on`, `locked`, `multi_window`, `second_window`, `foreground`, `active`, `reason`, `src_pkg`) | visible runtime state changed |
 | `applied` | `profile`, `reason`, `ok`, `applied`, counters, `ms`, `settle_ms` | apply finished |
-| `restored` | `ok`, counters, `saver_ok`, `input_suspend_ok`, `thermal_ok` | Service OFF restore finished |
+| `restored` | `ok`, counters, `saver_ok`, `input_suspend_ok`, `thermal_ok`, `affinity_ok`, `downscale_ok`, `display_ok` | Service OFF restore finished |
 | `env` | `env` | 30 s telemetry sample (on change) |
 | `diag` | `diag` | reply to `diag` |
 | `stats` | `entries`, `heals_*` | reply to `stats` |
@@ -46,7 +46,7 @@ disabled. `restore` closes the bridge gate immediately.
 | `bye` | — | graceful exit |
 
 `restored.ok` is true only when the engine restore **and all holds** succeeded
-(saver, input-suspend, thermal, thread placement). `applied.ok` is false when
+(saver, input-suspend, thermal, thread placement, render scale, display scale). `applied.ok` is false when
 a real device had zero written/unchanged keys and every key was locked;
 `applied` distinguishes a real apply from a fully locked profile. Host
 simulations (`SURYAPROFILER_DEBUG=1`, no device nodes) keep the all-missing
@@ -59,7 +59,8 @@ parsed as `DaemonEvent.Unknown`.
 
 `diag.diag` carries the config, env snapshot, watchers, holds, the newest
 `thermal_events`, `miui_sp_game`, storage health (`storage_life`,
-`storage_eol`, raw UFS hex) and `recent_logs` — the last ~120 daemon
+`storage_eol`, raw UFS hex), `downscale_held/apps`, `display_held/preset` and
+`recent_logs` — the last ~120 daemon
 log lines (oldest first, `<utc> <tag> [component] message`; `tag`
 E/W/I/D). The `holds` object also exposes `affinity_held`, `affinity_app`
 and `affinity_threads` for the opt-in thread placement.
@@ -74,4 +75,6 @@ and `affinity_threads` for the opt-in thread placement.
 | `rnd_input_suspend` | false | R&D: suspend charger input while the service runs |
 | `freq_floor_audit` | true | re-assert the profile CPU floor when an external writer pins it high (yields to MIUI performance mode; backs off 30 s→300 s when a re-assert does not stick) |
 | `thread_affinity` | false | opt-in Game thread placement: pin Unity/Unreal main+render threads while a Game-mapped app is foreground; restore on leave/screen-off/lock/Service OFF |
+| `app_downscale` | `{}` | per-app render scale (`cmd game downscale`), canonical `0.3`–`0.9`; prior captured/restored |
+| `display_scale` | `"off"` | optional system-wide 20:9 preset: `80`, `75`, `70`, `hd`, `hd-compact`, `60`, `50`; exact `wm size`/density restored on Service OFF |
 | `log_level` | (env) | `error`/`warn`/`info`/`debug`; the env var `SURYAPROFILER_LOG` seeds the default, a config `log_level` (when present) overrides it — applied live on every config reload |

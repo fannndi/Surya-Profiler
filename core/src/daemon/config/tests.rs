@@ -16,6 +16,8 @@ fn defaults_are_service_ready() {
     assert_eq!(c.base_profile, "balance");
     assert!(c.app_map.is_empty());
     assert!(!c.rnd_input_suspend, "R&D input suspend is opt-in");
+    assert!(c.app_downscale.is_empty());
+    assert_eq!(c.display_scale, "off");
 }
 
 #[test]
@@ -109,6 +111,19 @@ fn freq_audit_and_log_level_roundtrip() {
 fn rnd_switch_roundtrips() {
     let c: DaemonConfig = serde_json::from_str(r#"{"rnd_input_suspend":true}"#).unwrap();
     assert!(c.rnd_input_suspend);
+}
+
+#[test]
+fn render_scale_keys_roundtrip() {
+    let c: DaemonConfig =
+        serde_json::from_str(r#"{"app_downscale":{"com.g":"0.8"},"display_scale":"hd"}"#).unwrap();
+    assert_eq!(
+        c.app_downscale.get("com.g").map(String::as_str),
+        Some("0.8")
+    );
+    assert_eq!(c.display_scale, "hd");
+    let c: DaemonConfig = serde_json::from_str(r#"{"display_scale":""}"#).unwrap();
+    assert_eq!(c.display_scale, "");
 }
 
 #[test]

@@ -11,6 +11,8 @@ impl Bridge {
     ) -> Arc<Bridge> {
         let holds_path = state_dir.join("holds.json");
         let affinity_path = state_dir.join("affinity.json");
+        let downscale_path = state_dir.join("downscale.json");
+        let display_path = state_dir.join("display.json");
         let holds = fs::read_to_string(&holds_path)
             .ok()
             .and_then(|s| serde_json::from_str::<HoldsFile>(&s).ok())
@@ -29,6 +31,14 @@ impl Bridge {
             .ok()
             .and_then(|s| serde_json::from_str::<affinity::AffinityState>(&s).ok())
             .unwrap_or_default();
+        let downscale = fs::read_to_string(&downscale_path)
+            .ok()
+            .and_then(|s| serde_json::from_str::<downscale::DownscaleState>(&s).ok())
+            .unwrap_or_default();
+        let display = fs::read_to_string(&display_path)
+            .ok()
+            .and_then(|s| serde_json::from_str::<display::DisplayState>(&s).ok())
+            .unwrap_or_default();
         if holds.saver_held || holds.input_suspend_held || holds.thermal_held {
             publisher.log("bridge: recovered holds from previous run");
         }
@@ -39,15 +49,31 @@ impl Bridge {
                 affinity.target.as_deref().unwrap_or("?")
             ));
         }
+        if downscale.active() {
+            publisher.log(&format!(
+                "bridge: recovered {} downscale app(s)",
+                downscale.apps.len()
+            ));
+        }
+        if display.active() {
+            publisher.log(&format!(
+                "bridge: recovered display preset {:?}",
+                display.applied.as_deref().unwrap_or("?")
+            ));
+        }
         let bridge = Arc::new(Bridge {
             holds_path,
             affinity_path,
+            downscale_path,
+            display_path,
             publisher,
             state: Mutex::new(State {
                 thermal_refresh_pending: holds.thermal_held,
                 thermal_retry_at: None,
                 thermal_failures: 0,
                 affinity,
+                downscale,
+                display,
                 holds,
             }),
             saver_override: AtomicI8::new(-1),
@@ -87,16 +113,30 @@ impl Bridge {
     /// Persists the thread-placement state (`affinity.json`), separately from
     /// `holds.json` because a game can own a dozen per-tid restore points.
     pub(crate) fn persist_affinity(&self, st: &State) {
-        let Ok(s) = serde_json::to_string_pretty(&st.affinity) else {
+        self.persist_json(&self.affinity_path, &st.affinity);
+    }
+
+    /// Persists per-app render-scale holds (`downscale.json`).
+    pub(crate) fn persist_downscale(&self, st: &State) {
+        self.persist_json(&self.downscale_path, &st.downscale);
+    }
+
+    /// Persists the global display original/preset (`display.json`).
+    pub(crate) fn persist_display(&self, st: &State) {
+        self.persist_json(&self.display_path, &st.display);
+    }
+
+    fn persist_json<T: serde::Serialize>(&self, path: &Path, value: &T) {
+        let Ok(s) = serde_json::to_string_pretty(value) else {
             return;
         };
         use std::io::Write;
-        let tmp = self.affinity_path.with_extension("json.tmp");
+        let tmp = path.with_extension("json.tmp");
         let Ok(mut f) = fs::File::create(&tmp) else {
             return;
         };
         if f.write_all(s.as_bytes()).is_ok() && f.sync_all().is_ok() {
-            let _ = fs::rename(&tmp, &self.affinity_path);
+            let _ = fs::rename(&tmp, path);
         }
     }
 }

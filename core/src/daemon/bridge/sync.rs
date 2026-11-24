@@ -33,6 +33,10 @@ pub struct SyncCtx {
     pub rnd_input_suspend: bool,
     /// Opt-in thread placement for apps mapped to Game.
     pub thread_affinity: bool,
+    /// Per-app render scale (canonical 0.3..0.9).
+    pub app_downscale: BTreeMap<String, String>,
+    /// Optional system-wide display preset (`off`, `hd`, `80`, ...).
+    pub display_scale: String,
 }
 
 impl Bridge {

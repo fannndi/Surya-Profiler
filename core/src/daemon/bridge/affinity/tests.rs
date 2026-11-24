@@ -94,6 +94,8 @@ fn ctx(pkg: &str, profile: &str, enabled: bool) -> SyncCtx {
         custom_thermal: true,
         rnd_input_suspend: false,
         thread_affinity: enabled,
+        app_downscale: BTreeMap::new(),
+        display_scale: "off".into(),
     }
 }
 

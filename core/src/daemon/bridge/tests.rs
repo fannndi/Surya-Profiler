@@ -47,6 +47,8 @@ fn blocked_bridge_ignores_syncs() {
         custom_thermal: true,
         rnd_input_suspend: true,
         thread_affinity: false,
+        app_downscale: std::collections::BTreeMap::new(),
+        display_scale: "off".into(),
     };
     bridge.sync(&ctx);
     let st = bridge.lock();

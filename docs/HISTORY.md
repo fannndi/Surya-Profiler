@@ -1456,3 +1456,88 @@ thermal/diagnostik.
 4. **Thermal repair** aman: hanya menulis ulang file milik marker; tidak
    menyentuh config vendor/asing.
 5. **UFS health read-only** masuk doctor/diag; tidak ada write.
+
+---
+
+## RENDER-SCALE-2026-11-24.md
+
+## Render scale + display scale R&D dan 0.10.0 — 2026-11-24
+
+### 1. Mekanisme
+
+- **Per-app:** Android 12 GameManagerService shell
+  `cmd game downscale <ratio> <pkg>` → PlatformCompat
+  `DOWNSCALED` + `DOWNSCALE_xx` → `CompatModePackages`. Uniform buffer
+  downscale; layout/dp/aspect tetap, hanya DPR yang turun.
+- **Global:** `wm size <WxH>` + `wm density <D>`; exact 20:9 presets, density
+  mengatur layout UI (bukan performa).
+- Root `cmd` berfungsi (`u:r:magisk:s0`); `cmd game help` keluar 255 di AOSP
+  walau sukses, jadi feature probe harus membaca teksnya, bukan exit code.
+- Capture prior per-app dari `dumpsys platform_compat`; capture
+  size/density dari `wm size`/`wm density` (override atau physical).
+
+### 2. Uji global 720×1600 (surya)
+
+| Density | dp width | Catatan |
+|---:|---:|---|
+| 240 | 480dp | kecil |
+| **267** | **431dp** | sama dengan layout native 432dp |
+| 293 | 393dp | ~10% lebih besar |
+| **320** | **360dp** | spec 720p vendor (`set_density_by_fb`), UI lebih besar/terbaca |
+| 400 | 288dp | terlalu besar |
+
+ROM: `system/system/build.prop` `ro.sf.lcd_density=440`;
+`vendor/bin/init.qcom.early_boot.sh` → lebar ≥720 = 320, ≥1080 = 480;
+device memakai override `display_density_forced=400`.
+Aspect 720×1600 = 20:9 exact; screenshot 720×1600; touch benar.
+
+### 3. Per-app: layout/DPI otomatis
+
+Chrome JS metrics:
+- native: `inner 432×815`, DPR 2.5.
+- native + 0.5: `inner 432×815`, **DPR 1.25**, `mCompatFrame=540×1200`,
+  `mGlobalScale=2.0`.
+- native + 0.65: `mCompatFrame=702×1560`, `mGlobalScale=1.538`.
+- 720p/320 + 0.8: `mCompatFrame=576×1280`, `mGlobalScale=1.25`.
+Jadi aspect/layout/dp tidak berubah; hanya buffer/DPR. Perubahan live dapat
+merestart app (Chrome), jadi apply persistent sebelum launch.
+
+### 4. Daya (60 s, brightness 400, 60Hz, `input_suspend=1`)
+
+Chrome WebGL stress (GPU-bound):
+
+| Kondisi | mW | GPU% | Delta |
+|---|---:|---:|---:|
+| Native 1080p | 2209.6 | 85.1 | — |
+| 720p @320 | 1636.7 | 65.1 | −26% |
+| 720p @267 | 1571.7 | 66.3 | −29% |
+| Native + 0.65 | 1564.0 | 66.5 | −29% |
+| 720p @320 + 0.8 | 1309.8 | 49.0 | −41% |
+
+Seven Knights:
+
+| Kondisi | mW | GPU% | Delta |
+|---|---:|---:|---:|
+| Native | 2781.1 | 79.1 | — |
+| 720p @320 | 1789.3 | 80.2 | −36% |
+| Native + 0.8 | 2039.3 | 75.4 | −27% |
+
+TikTok (powersave): native 1911.8 mW (GPU 8.0%) vs 720p 2011.7 (4.5%) vs
+native+0.65 1912.8 (4.4%) vs 720p+0.8 1970.0 (3.4%) — **tidak ada win**;
+decode/network/panel dominan. Density tidak mengubah buffer app (tetap
+720×1600), jadi bukan knob performa.
+
+### 5. E2E device 0.10.0
+
+| Step | Hasil |
+|---|---|
+| Deploy | APK 0.10.0 / versionCode 12; binary md5 cocok |
+| Config `app_downscale` game 0.8 | log `downscale 80% (prior native)`; `downscale.json` record |
+| Seven Knights | `mCompatFrame=864×1920`, `mGlobalScale=1.25`, `mFrame=1080×2400`, `sconfig=61` |
+| Display `hd` | `wm size 720×1600`, density 320; `display.json` original `{size:null,density:400}` |
+| Combo hd + game 0.8 | `mFrame=720×1600`, `mCompatFrame=576×1280`, `mGlobalScale=1.25` |
+| Force-stop (stdin EOF) | `display: restored size physical, density 400`; `downscale restored to native`; state JSON kosong; `downscale_ok/display_ok=true`; `wm` 1080×2400 @400 |
+| Final state | service ON, base balance, `sconfig=60`, config `display_scale=off`, `app_downscale={}` |
+
+UI screenshots: Home pada 720p/320 tetap rapi; Settings native/720p/267/320
+dan app row badge diverifikasi.

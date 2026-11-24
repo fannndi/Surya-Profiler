@@ -86,6 +86,8 @@ fun HomeScreen(vm: HomeViewModel) {
                 onFreqFloorAudit = vm::onFreqFloorAudit,
                 threadAffinity = state.threadAffinity,
                 onThreadAffinity = vm::onThreadAffinity,
+                displayScale = state.displayScale,
+                onDisplayScale = vm::onDisplayScale,
                 rndInputSuspend = state.rndInputSuspend,
                 onRndInputSuspend = vm::onRndInputSuspend,
                 onBack = { dest = HomeDest.HOME },

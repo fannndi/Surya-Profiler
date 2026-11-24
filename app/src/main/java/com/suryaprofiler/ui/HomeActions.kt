@@ -139,6 +139,11 @@ internal fun HomeViewModel.onThreadAffinity(v: Boolean) {
     viewModelScope.launch(Dispatchers.IO) { config.threadAffinity = v }
 }
 
+/** Global display preset: system-wide wm size/density, restored on Service OFF. */
+internal fun HomeViewModel.onDisplayScale(v: String) {
+    viewModelScope.launch(Dispatchers.IO) { config.displayScale = v }
+}
+
 /** R&D switch: daemon-owned, auto-released on Service OFF. */
 internal fun HomeViewModel.onRndInputSuspend(v: Boolean) {
     if (!_state.value.serviceRunning) return

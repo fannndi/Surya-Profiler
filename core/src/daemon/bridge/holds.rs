@@ -24,6 +24,12 @@ pub struct ReleaseReport {
     /// Thread placement (opt-in) captured affinity restore.
     #[serde(default)]
     pub affinity_ok: bool,
+    /// Per-app render-scale holds (cmd game downscale) restore.
+    #[serde(default)]
+    pub downscale_ok: bool,
+    /// Global display preset (wm size/density) restore.
+    #[serde(default)]
+    pub display_ok: bool,
 }
 
 impl Default for ReleaseReport {
@@ -33,13 +39,20 @@ impl Default for ReleaseReport {
             input_suspend_ok: true,
             thermal_ok: true,
             affinity_ok: true,
+            downscale_ok: true,
+            display_ok: true,
         }
     }
 }
 
 impl ReleaseReport {
     pub fn ok(&self) -> bool {
-        self.saver_ok && self.input_suspend_ok && self.thermal_ok && self.affinity_ok
+        self.saver_ok
+            && self.input_suspend_ok
+            && self.thermal_ok
+            && self.affinity_ok
+            && self.downscale_ok
+            && self.display_ok
     }
 
     /// Machine-readable failure names for logs/diagnostics.
@@ -56,6 +69,12 @@ impl ReleaseReport {
         }
         if !self.affinity_ok {
             out.push("affinity");
+        }
+        if !self.downscale_ok {
+            out.push("downscale");
+        }
+        if !self.display_ok {
+            out.push("display");
         }
         out
     }
@@ -234,6 +253,16 @@ pub struct HoldsInfo {
     pub affinity_app: Option<String>,
     #[serde(default)]
     pub affinity_threads: usize,
+    /// Per-app render scale holds.
+    #[serde(default)]
+    pub downscale_held: bool,
+    #[serde(default)]
+    pub downscale_apps: usize,
+    /// Optional global display preset.
+    #[serde(default)]
+    pub display_held: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_preset: Option<String>,
 }
 
 #[cfg(test)]

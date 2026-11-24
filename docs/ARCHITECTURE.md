@@ -47,6 +47,8 @@ Compose UI ──► ViewModel ──► DynamicProfileService / DaemonLink ─�
 | `core/src/daemon/bridge/` | saver/input-suspend/thermal holds + opt-in thread placement (`affinity/`) |
 | `core/src/daemon/bridge/thermal/` | profile/paths/io/perf/map/install/select/sync/release |
 | `core/src/daemon/bridge/affinity/` | opt-in Game thread placement: rules, `/proc` scan, `taskset`, capture/restore |
+| `core/src/daemon/bridge/downscale/` | per-app render scale: AOSP `cmd game downscale`, prior capture, restore |
+| `core/src/daemon/bridge/display/` | optional global display presets: exact 20:9 `wm size`/density, capture/restore |
 | `core/src/main.rs` | binary entry |
 | `core/src/cli.rs` + `cli/commands.rs` | CLI dispatch and one-shot commands |
 | `core/src/platform.rs` | process runner with hard timeout (output drained) |

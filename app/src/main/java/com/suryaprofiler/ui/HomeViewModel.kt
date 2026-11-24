@@ -81,6 +81,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         viewModelScope.launch {
+            config.displayScaleFlow.collect { v ->
+                _state.update { it.copy(displayScale = v) }
+            }
+        }
+        viewModelScope.launch {
             DynamicProfileState.running.collect { v -> _state.update { it.copy(serviceRunning = v) } }
         }
         viewModelScope.launch {

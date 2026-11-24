@@ -111,6 +111,14 @@ the catalog guard.
     `Cpus_allowed_list`. Capture the per-tid mask in `affinity.json`, restore
     on leave/screen-off/lock/Service OFF/exit, and yield sticky when the app
     re-pins a thread. Never touch system processes or widen a mask.
+15. **Render scale and display scale are captured holds** — per-app render
+    scale uses the Android 12 `cmd game downscale` shell interface and must
+    capture/restore the prior PlatformCompat override; never apply on a
+    failed capture. Global display scale uses only exact 20:9 presets and
+    captures the user's exact `wm size`/`wm density` overrides (default
+    density 400 here), restoring them on Service OFF/exit; never `reset`
+    blindly. Both are opt-in/default off, fail-closed in the release report,
+    and have crash-recovery JSON files.
 
 ## File map (keep current)
 
@@ -144,6 +152,8 @@ the catalog guard.
 | `src/daemon/worker.rs` | coalescing apply worker |
 | `src/daemon/bridge/thermal/` | profile/paths/io/perf/map/install/select/sync/release/files |
 | `src/daemon/bridge/affinity/` | opt-in Game thread placement (rules, `/proc`, `taskset`, restore) |
+| `src/daemon/bridge/downscale/` | per-app render scale (`cmd game downscale`, prior capture/restore) |
+| `src/daemon/bridge/display/` | global 20:9 display presets (`wm size`/density capture/restore) |
 | `src/diagnose/` | `doctor` self-check (battery/miui/env/thermal/thermal-files) + `debug env` |
 | `assets/thermal/` | plaintext balance/game/powersave/sleep configs (encrypted at runtime) |
 | `tests/` | host E2E: protocol, foreground watcher, multi-window probe |
@@ -255,7 +265,10 @@ ownership map, and a full real-game run with Seven Knights
 (`sconfig=61`, no MIUI override, base re-assert, stock restore). 0.9.0
 (2026-11-24) verified opt-in thread placement (Seven Knights: RenderThread/
 UnityGfxDeviceW → cpu6, leave/daemon-exit restore, `affinity.json` empty),
-the corrupt-config thermal self-repair, and doctor UFS health. Reboot
+the corrupt-config thermal self-repair, and doctor UFS health. 0.10.0
+(2026-11-24) verified per-app render scale (Seven Knights 0.8 →
+`mCompatFrame=864×1920`), global display `hd` (720×1600 @320), the combined
+576×1280 buffer, and exact force-stop restore to 1080×2400 @400. Reboot
 remains covered by the 2026-11-21 run.
 Evidence: `docs/HISTORY.md`.
 

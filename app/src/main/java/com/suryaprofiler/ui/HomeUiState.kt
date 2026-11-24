@@ -37,6 +37,8 @@ data class HomeUiState(
     val freqFloorAudit: Boolean = true,
     /** Opt-in thread placement for apps mapped to Game. */
     val threadAffinity: Boolean = false,
+    /** Global display preset (`off`, `hd`, `80`, ...). */
+    val displayScale: String = "off",
     /** R&D: suspend charger input while the service is on. */
     val rndInputSuspend: Boolean = false,
     val mappedCount: Int = 0,

@@ -138,6 +138,8 @@ impl Runtime {
             custom_thermal: cfg.custom_thermal,
             rnd_input_suspend: cfg.rnd_input_suspend,
             thread_affinity: cfg.thread_affinity,
+            app_downscale: cfg.app_downscale.clone(),
+            display_scale: cfg.display_scale.clone(),
         }
     }
 

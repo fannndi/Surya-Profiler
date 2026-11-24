@@ -15,6 +15,8 @@
 //! the service-off restore has started. A failed restore calls `resume()`.
 
 mod affinity;
+mod display;
+mod downscale;
 mod holds;
 mod input_suspend;
 mod lifecycle;
@@ -65,6 +67,8 @@ use std::sync::{Arc, Mutex};
 pub struct Bridge {
     holds_path: PathBuf,
     affinity_path: PathBuf,
+    downscale_path: PathBuf,
+    display_path: PathBuf,
     publisher: Arc<Publisher>,
     state: Mutex<State>,
     /// Lock-free attribution mirror: -1 = no hold (arbiter sees live),
@@ -82,6 +86,10 @@ pub(crate) struct State {
     holds: Holds,
     /// Thread placement (opt-in Game-only): captured affinity per tid.
     affinity: affinity::AffinityState,
+    /// Per-app render scale holds (cmd game downscale).
+    downscale: downscale::DownscaleState,
+    /// Optional global display preset (wm size/density).
+    display: display::DisplayState,
     /// Rebuild `/data` map/configs on the first thermal sync after a daemon
     /// restart so ROM updates and the 20–23 -> 60–63 migration are picked up.
     thermal_refresh_pending: bool,
@@ -124,6 +132,10 @@ impl Bridge {
             affinity_held: st.affinity.active(),
             affinity_app: st.affinity.target.clone(),
             affinity_threads: st.affinity.threads.len(),
+            downscale_held: st.downscale.active(),
+            downscale_apps: st.downscale.apps.len(),
+            display_held: st.display.active(),
+            display_preset: st.display.applied.clone(),
         }
     }
 

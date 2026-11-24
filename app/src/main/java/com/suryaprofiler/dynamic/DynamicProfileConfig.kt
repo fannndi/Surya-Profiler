@@ -15,8 +15,9 @@ import java.io.File
  *
  * Schema 2 is deliberately tiny: service flags, the universal base, the
  * per-app Device-Profile mapping, the automatic thermal takeover, the R&D
- * input-suspend switch, the opt-in Game thread placement and the
- * crash-recovery `restore_pending` marker.
+ * input-suspend switch, the opt-in Game thread placement, per-app render
+ * scale, the optional global display preset and the crash-recovery
+ * `restore_pending` marker.
  *
  * Ownership: the app is the SINGLE writer; the Rust daemon reads the file
  * (start, `config_changed` hint, mtime fallback). Writes are atomic
@@ -81,6 +82,24 @@ class DynamicProfileConfig private constructor(context: Context) {
     var threadAffinity: Boolean
         get() = _threadAffinity.value
         set(v) { put { it.put("thread_affinity", v) } }
+
+    /** Per-app render scale (canonical ratio strings). */
+    private val _appDownscale = MutableStateFlow<Map<String, String>>(emptyMap())
+    val appDownscaleFlow: StateFlow<Map<String, String>> = _appDownscale
+
+    /** null/blank ratio removes the per-app downscale. */
+    fun setAppDownscale(pkg: String, ratio: String?): Boolean = put { json ->
+        val map = json.optJSONObject("app_downscale") ?: JSONObject()
+        if (ratio.isNullOrBlank()) map.remove(pkg) else map.put(pkg, ratio)
+        json.put("app_downscale", map)
+    }
+
+    /** Global display preset (`off`, `hd`, `80`, ...). */
+    private val _displayScale = MutableStateFlow("off")
+    val displayScaleFlow: StateFlow<String> = _displayScale
+    var displayScale: String
+        get() = _displayScale.value
+        set(v) { put { it.put("display_scale", v) } }
 
     /** A Service OFF was started but not confirmed yet (crash recovery). */
     private val _restorePending = MutableStateFlow(false)
@@ -185,6 +204,8 @@ class DynamicProfileConfig private constructor(context: Context) {
         _restorePending.value = cfg.restorePending
         _freqFloorAudit.value = cfg.freqFloorAudit
         _threadAffinity.value = cfg.threadAffinity
+        _appDownscale.value = cfg.appDownscale
+        _displayScale.value = cfg.displayScale
     }
 
     /**

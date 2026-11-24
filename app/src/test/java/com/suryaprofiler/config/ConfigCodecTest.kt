@@ -53,6 +53,8 @@ class ConfigCodecTest {
             restorePending = true,
             freqFloorAudit = false,
             threadAffinity = true,
+            appDownscale = mapOf("com.p" to "0.65"),
+            displayScale = "hd",
             logLevel = "debug",
         )
         val json = ConfigCodec.encode(cfg)
@@ -61,6 +63,8 @@ class ConfigCodecTest {
         assertTrue(ConfigCodec.decode(json).restorePending)
         assertFalse(ConfigCodec.decode(json).freqFloorAudit)
         assertTrue(ConfigCodec.decode(json).threadAffinity)
+        assertEquals(mapOf("com.p" to "0.65"), ConfigCodec.decode(json).appDownscale)
+        assertEquals("hd", ConfigCodec.decode(json).displayScale)
         assertEquals("debug", ConfigCodec.decode(json).logLevel)
         assertEquals("powersave", json.getJSONObject("app_map").getString("com.p"))
     }

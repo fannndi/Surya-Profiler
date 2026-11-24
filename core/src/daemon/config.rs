@@ -30,6 +30,10 @@ fn default_base() -> String {
     "balance".into()
 }
 
+fn default_display_scale() -> String {
+    "off".into()
+}
+
 /// Profile ids the engine ships. `sleep` is automatic; the rest are the
 /// three user-facing Device Profiles.
 pub const USER_PROFILES: &[&str] = &["powersave", "balance", "game"];
@@ -70,6 +74,14 @@ pub struct DaemonConfig {
     /// the captured affinity on release.
     #[serde(default)]
     pub thread_affinity: bool,
+    /// Per-app render scale (`cmd game downscale`), ratio 0.3..0.9.
+    /// Empty = native; values are canonicalized/validated by the bridge.
+    #[serde(default)]
+    pub app_downscale: BTreeMap<String, String>,
+    /// Optional system-wide display preset (`off`, `80`, `hd`, ...).
+    /// Default off; `wm size`/`wm density` are captured and restored.
+    #[serde(default = "default_display_scale")]
+    pub display_scale: String,
     /// Daemon log level (`error|warn|info|debug`); None = env/default.
     #[serde(default)]
     pub log_level: Option<String>,
@@ -91,6 +103,8 @@ impl Default for DaemonConfig {
             rnd_input_suspend: false,
             freq_floor_audit: true,
             thread_affinity: false,
+            app_downscale: BTreeMap::new(),
+            display_scale: default_display_scale(),
             log_level: None,
         }
     }
