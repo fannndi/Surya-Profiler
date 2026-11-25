@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoMode
+import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.ElevatedCard
@@ -139,6 +140,37 @@ internal fun DynamicProfileRow(state: HomeUiState, onToggle: (Boolean) -> Unit) 
                 checked = state.dynamicEnabled,
                 onCheckedChange = onToggle,
                 enabled = serviceOn,
+            )
+        }
+    }
+}
+
+// --- power entry ---------------------------------------------------------------
+
+@Composable
+internal fun PowerRow(onClick: () -> Unit) {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconCircle(Icons.Default.BatteryChargingFull)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Power usage", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Charging, usage and history",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

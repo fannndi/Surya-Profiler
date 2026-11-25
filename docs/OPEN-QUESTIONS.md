@@ -193,3 +193,32 @@ Hal yang belum cukup bukti dan perlu diputuskan sebelum implementasi final.
   different downscale (foreground re-check re-asserts); global display
   reboot/persistence needs a device run; per-app 65/70 choice for video apps
   is user preference, not a guaranteed battery win.
+
+## 16. Power usage — implemented 0.11.0 (host-verified)
+
+- **Read-only:** 3 s screen-on / 30 s screen-off sampler; one-minute buckets;
+  7-day `power-history.jsonl`; all-time `power-peaks.json`; clear; clean-exit
+  flush. No charge/limit/guard writes.
+- **Units:** battery-side `current_now × voltage_now`; negative current =
+  charging. While charging this is net into the battery, not wall power.
+  `usb`/`main` input rails are shown only when the kernel exposes them and
+  are labelled as reported/negotiated, not measured wall power.
+- **Attribution:** profile every sample (including Sleep); app only when
+  screen-on and unlocked. Multi-window buckets use the daemon's primary
+  foreground package; this is an approximation.
+- **Device-verified 2026-11-26:** live 797 mA / 3.51 W at 85% matched
+  `current_now=-798645 µA` / `voltage_now=4403272 µV`; `charge_counter`
+  exists (3,731,030 µAh) and is quantized, so it is only a rough estimate;
+  `usb` has no `voltage_now`/`current_now` files — its `uevent` reports
+  `VOLTAGE_NOW=4748096`, `INPUT_CURRENT_NOW=1317690`,
+  `REAL_TYPE=USB_CDP`, and `main` has `input_*_settled`; the probe uses
+  those fallbacks. `input_suspend=1` flips to discharging, the warning
+  appears, and the switch restores 0. Screen-off produced a 60 s bucket
+  with `screen_on:false`, `profile:"sleep"`, 2 samples (deep-sleep cadence).
+  Per-app/profile rows (2-minute filter), peaks, Clear, and history across
+  Service OFF/ON all verified. `docs/HISTORY.md` has the full table.
+- **Open:** the 7-day trim has not been run for a week yet (unit-tested);
+  `battery_charging_enabled=0` was not exercised on device (read-only
+  detection path); a different fuel gauge may use the opposite current sign
+  and needs a fresh audit. Short charge/usage switches inside one minute are
+  averaged in the chart (live card + peaks keep the extremes).

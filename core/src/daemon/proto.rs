@@ -9,11 +9,10 @@
 
 use crate::daemon::bridge::{HoldsInfo, ReleaseReport};
 use crate::daemon::config::DaemonConfig;
+use crate::daemon::power::{PowerBucket, PowerSample, PowerSnapshot};
 use crate::daemon::stats::StatEntry;
 use crate::engine::env::EnvSnapshot;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
-use std::sync::Arc;
 
 /// Protocol version — bumped on breaking changes; the app checks `hello`.
 pub const VERSION: u32 = 3;
@@ -41,6 +40,15 @@ pub enum Command {
     Diag,
     /// Transition history (dashboard).
     Stats,
+    /// Power usage snapshot; `watch` also starts/stops live samples.
+    Power {
+        watch: bool,
+        /// Requested history window (clamped by the daemon; default 24 h).
+        #[serde(default)]
+        window_s: Option<u64>,
+    },
+    /// Clear power history + all-time peaks (user action).
+    PowerClear,
     /// Graceful shutdown (service destroyed on purpose).
     Shutdown,
     /// Liveness check -> `pong`.
@@ -86,6 +94,14 @@ pub enum Event {
     /// Environment sample (battery / thermal / GPU busy) — emitted on change.
     /// Boxed: EnvSnapshot outgrew the other variants (clippy).
     Env { env: Box<EnvSnapshot> },
+    /// Power history reply for `cmd: power` (boxed: window + peaks).
+    Power { snapshot: Box<PowerSnapshot> },
+    /// Live power sample while a Power screen is watching.
+    PowerLive {
+        sample: Box<PowerSample>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        bucket: Option<Box<PowerBucket>>,
+    },
     /// Diagnostics reply for `cmd: diag` (boxed: it carries the whole config).
     Diag { diag: Box<DiagInfo> },
     /// Transition history reply for `cmd: stats` (plus auto-revive totals).
@@ -177,123 +193,6 @@ pub struct DiagInfo {
     /// Newest daemon log lines (ring buffer, oldest first; display only).
     #[serde(default)]
     pub recent_logs: Vec<String>,
-}
-
-// --- emission ---------------------------------------------------------------
-
-enum OutMsg {
-    Line(String),
-    Shutdown(std::sync::mpsc::SyncSender<()>),
-}
-
-/// Serialized JSON-line writer shared by all threads.
-///
-/// A dedicated writer thread owns stdout. Producers use `try_send`: if the
-/// app stops reading and the bounded queue fills, events are dropped and
-/// logged instead of freezing the daemon's decision loop. `shutdown` flushes
-/// the queue before process exit.
-pub struct Publisher {
-    tx: std::sync::mpsc::SyncSender<OutMsg>,
-}
-
-impl Publisher {
-    pub fn new() -> Arc<Self> {
-        let (tx, rx) = std::sync::mpsc::sync_channel::<OutMsg>(256);
-        let spawned = std::thread::Builder::new()
-            .name("stdout-writer".into())
-            .spawn(move || {
-                let mut out = std::io::stdout();
-                while let Ok(msg) = rx.recv() {
-                    match msg {
-                        OutMsg::Line(line) => {
-                            if writeln!(out, "{line}").is_err() {
-                                break;
-                            }
-                            let _ = out.flush();
-                        }
-                        OutMsg::Shutdown(ack) => {
-                            let _ = out.flush();
-                            let _ = ack.send(());
-                            break;
-                        }
-                    }
-                }
-            });
-        if let Err(e) = spawned {
-            let _ = writeln!(std::io::stderr(), "publisher: writer thread failed: {e}");
-        }
-        Arc::new(Publisher { tx })
-    }
-
-    pub fn emit(&self, ev: &Event) {
-        self.emit_with_wait(ev, 0);
-    }
-
-    /// Command replies / restore results must not be silently dropped by the
-    /// bounded queue. Wait briefly, then give up (never block forever).
-    pub fn emit_reliable(&self, ev: &Event) {
-        self.emit_with_wait(ev, 2_000);
-    }
-
-    fn emit_with_wait(&self, ev: &Event, wait_ms: u64) {
-        let line = match serde_json::to_string(ev) {
-            Ok(l) => l,
-            Err(e) => {
-                self.log(&format!("event serialize failed: {e}"));
-                return;
-            }
-        };
-        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(wait_ms);
-        loop {
-            match self.tx.try_send(OutMsg::Line(line.clone())) {
-                Ok(()) => return,
-                Err(std::sync::mpsc::TrySendError::Full(_)) => {
-                    if std::time::Instant::now() >= deadline {
-                        self.log("publisher: stdout backpressure; dropped event");
-                        return;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                }
-                Err(std::sync::mpsc::TrySendError::Disconnected(_)) => return,
-            }
-        }
-    }
-
-    /// Flushes queued events and stops the writer thread. Call once at exit.
-    pub fn shutdown(&self) {
-        let (ack_tx, ack_rx) = std::sync::mpsc::sync_channel(0);
-        let mut msg = Some(OutMsg::Shutdown(ack_tx));
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-        loop {
-            match self
-                .tx
-                .try_send(msg.take().expect("shutdown message is present"))
-            {
-                Ok(()) => {
-                    let _ = ack_rx.recv_timeout(std::time::Duration::from_secs(2));
-                    return;
-                }
-                Err(std::sync::mpsc::TrySendError::Full(m)) => {
-                    if std::time::Instant::now() >= deadline {
-                        return;
-                    }
-                    msg = Some(m);
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                }
-                Err(std::sync::mpsc::TrySendError::Disconnected(_)) => return,
-            }
-        }
-    }
-
-    /// Human log line: levelled logger (ring + file) with a stderr mirror
-    /// that the app relays to logcat.
-    ///
-    /// Never use `eprintln!`: the crate is built with `panic = "abort"`, and
-    /// an app death closes stderr at the same time as stdin — an EPIPE panic
-    /// would abort before the exit restore. A failed log write is ignored.
-    pub fn log(&self, msg: &str) {
-        crate::logging::write(crate::logging::Level::Info, "daemon", msg);
-    }
 }
 
 #[cfg(test)]

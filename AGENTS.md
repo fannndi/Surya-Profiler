@@ -119,6 +119,13 @@ the catalog guard.
     density 400 here), restoring them on Service OFF/exit; never `reset`
     blindly. Both are opt-in/default off, fail-closed in the release report,
     and have crash-recovery JSON files.
+16. **Power usage telemetry is read-only and daemon-owned** — the fast sampler
+    only reads `power_supply` nodes (sign: negative = charging, positive =
+    discharging) and writes append-only one-minute buckets under
+    `<state_dir>/power-history.jsonl`. It never writes charge/sysfs nodes;
+    the R&D `input_suspend` switch remains the only charge write (rule 8).
+    Per-app attribution is screen-on + unlocked only. Do not turn this into a
+    charge limit/guard feature.
 
 ## File map (keep current)
 
@@ -135,7 +142,7 @@ the catalog guard.
 | `src/engine/catalog/entries/` | parameter registry split by cpu/gpu-io/kernel/misc |
 | `src/engine/catalog/forbidden.rs` | framework-owned paths / ALLOWED_EXACT |
 | `src/engine/probe.rs` | read-only capture + option lists |
-| `src/engine/env/` | telemetry model/parsers/sampler/scenario/sysfs |
+| `src/engine/env/` | telemetry model/parsers/sampler/scenario/sysfs + read-only `power.rs` probe |
 | `src/engine/thermal_scenario/` | PowerKeeper `sconfig` ID/offset decoder + SP-game list |
 | `src/engine/thermal_log.rs` | `mi_thermald` dump parser |
 | `src/engine/crypt.rs` | AES-128-CBC encrypt/decrypt for thermal configs |
@@ -144,7 +151,9 @@ the catalog guard.
 | `src/engine/validate.rs` | per-kind validation; MIUI 14 max-vs-floor lock |
 | `src/engine/readback.rs` | read-back rules + snapshot normalization |
 | `src/engine/apply/` | apply/restore/verify + atomic store |
-| `src/daemon/` | arbiter, worker, watchers, bridge, settings, env, stats |
+| `src/daemon/` | arbiter, worker, watchers, bridge, settings, env, stats, power |
+| `src/daemon/power/` | fast power sampler, 1-min buckets, peaks, append-only JSONL history |
+| `src/daemon/publisher.rs` / `instance.rs` | stdout JSON-lines writer / PID single-writer guard |
 | `src/daemon/freq_audit.rs` | freq floor audit sentinel (external floor drift detection) |
 | `src/daemon/bridge/` | saver, R&D input-suspend, thermal takeover + holds |
 | `src/daemon/commands.rs` | command dispatch + foreground/peek plumbing |
@@ -165,7 +174,7 @@ the catalog guard.
 | `MainActivity.kt` | single ComponentActivity Compose host |
 | `core/RootBridge.kt` | `su` exec + asset deploy |
 | `core/FtClient.kt` / `Tuner.kt` | CLI client for service-off/restore paths |
-| `protocol/` | ProfileId, commands, typed events, diagnostics parsers |
+| `protocol/` | ProfileId, commands, typed events, diagnostics + power parsers |
 | `config/` | AppConfig + pure ConfigCodec |
 | `dynamic/DynamicProfileService.kt` | FGS lifecycle + Android signals + restore-on-stop |
 | `dynamic/DaemonClient.kt` | daemon spawn, JSON-lines, stderr relay |
@@ -173,7 +182,7 @@ the catalog guard.
 | `dynamic/DynamicProfileState.kt` | StateFlows mirrored from events |
 | `dynamic/DaemonNotifications.kt` | channel + notification builder |
 | `dynamic/AutomationReceiver.kt` | `SET_PROFILE` only |
-| `ui/` | Home, Apps, Settings, Diagnostics, cards/dialogs, theme |
+| `ui/` | Home, Apps, Power, Settings, Diagnostics, cards/dialogs, theme |
 
 ## Build
 
@@ -242,6 +251,10 @@ Architecture: `docs/ARCHITECTURE.md`; protocol: `docs/PROTOCOL.md`; thermal:
 | `SURYAPROFILER_FLOOR_RETRY_MS` | 3500 ms one-shot retry after a transient MIUI boost (`0` disables) |
 | `SURYAPROFILER_AUDIT_INTERVAL_MS` | 15000 ms freq floor audit sampling cadence |
 | `SURYAPROFILER_AUDIT_GRACE_MS` | 30000 ms how long a high floor persists before the audit acts |
+| `SURYAPROFILER_POWER_SAMPLE_MS` | 3000 ms power sampler cadence while screen-on |
+| `SURYAPROFILER_POWER_SAMPLE_OFF_MS` | 30000 ms power sampler cadence while screen-off |
+| `SURYAPROFILER_POWER_BUCKET_MS` | 60000 ms power history bucket width |
+| `SURYAPROFILER_POWER_RETAIN_MS` | 7 days power history retention |
 
 ## Device E2E status
 
@@ -269,11 +282,23 @@ the corrupt-config thermal self-repair, and doctor UFS health. 0.10.0
 (2026-11-24) verified per-app render scale (Seven Knights 0.8 →
 `mCompatFrame=864×1920`), global display `hd` (720×1600 @320), the combined
 576×1280 buffer, and exact force-stop restore to 1080×2400 @400. Reboot
-remains covered by the 2026-11-21 run.
+remains covered by the 2026-11-21 run. 0.11.0 (2026-11-26) verified Power
+usage on device: live 797 mA/3.51 W matched `current_now=-798645 µA` /
+`voltage_now=4403272 µV`, `usb (USB_CDP)` input via uevent, bypass warning
+(`input_suspend=1` → discharging, restored 0), 1-minute history/peaks,
+screen-off Sleep bucket, per-app/profile rows, Clear, history across Service
+OFF/ON, and the 19/19 stock restore with the Power CTA while off.
 Evidence: `docs/HISTORY.md`.
 
 ## Known open items
 
+- Power usage is read-only and battery-side: while charging, W is net into
+  the battery (not wall power); `usb`/`main` input values are reported or
+  negotiated and may be limits. On surya the `usb` rail exposes voltage and
+  input current only through `uevent` (`REAL_TYPE=USB_CDP`).
+- Power history starts at v0.11.0, one-minute buckets with a 7-day ring; the
+  current sign is device-specific (negative = charging) and must be
+  re-audited on a different fuel gauge.
 - Multi-window uses a `dumpsys window` probe; re-check after MIUI updates
   (task-line shape may change).
 - The `FolkPatch/APatch` superuser must grant the app once; before that the

@@ -25,6 +25,26 @@ fn commands_parse_from_tagged_json() {
     assert_eq!(c, Command::Stats);
     let c: Command = serde_json::from_str(r#"{"cmd":"restore"}"#).unwrap();
     assert_eq!(c, Command::Restore);
+
+    let c: Command = serde_json::from_str(r#"{"cmd":"power","watch":true}"#).unwrap();
+    assert_eq!(
+        c,
+        Command::Power {
+            watch: true,
+            window_s: None
+        }
+    );
+    let c: Command =
+        serde_json::from_str(r#"{"cmd":"power","watch":true,"window_s":3600}"#).unwrap();
+    assert_eq!(
+        c,
+        Command::Power {
+            watch: true,
+            window_s: Some(3600)
+        }
+    );
+    let c: Command = serde_json::from_str(r#"{"cmd":"power_clear"}"#).unwrap();
+    assert_eq!(c, Command::PowerClear);
 }
 
 #[test]

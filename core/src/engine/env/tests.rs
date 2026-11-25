@@ -225,6 +225,105 @@ fn missing_nodes_yield_none_not_panic() {
 }
 
 #[test]
+fn power_parsers_accept_device_formats() {
+    assert_eq!(
+        parse_battery_status("Charging\n").as_deref(),
+        Some("charging")
+    );
+    assert_eq!(
+        parse_battery_status("Not charging").as_deref(),
+        Some("not_charging")
+    );
+    assert_eq!(parse_battery_status("Full").as_deref(), Some("full"));
+    assert_eq!(
+        parse_battery_status("Discharging").as_deref(),
+        Some("discharging")
+    );
+    assert_eq!(parse_battery_status("mystery"), None);
+    assert_eq!(parse_bool01("1\n"), Some(true));
+    assert_eq!(parse_bool01("0"), Some(false));
+    assert_eq!(parse_bool01("yes"), None);
+}
+
+#[test]
+fn power_probe_reads_battery_and_input() {
+    let root = tmpdir("power");
+    let w = |rel: &str, body: &str| {
+        let p = root.join(rel);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(p, body).unwrap();
+    };
+    w("sys/class/power_supply/battery/status", "Charging\n");
+    w("sys/class/power_supply/battery/current_now", "-1240000\n");
+    w("sys/class/power_supply/battery/voltage_now", "4120000\n");
+    w("sys/class/power_supply/battery/capacity", "78\n");
+    w("sys/class/power_supply/battery/temp", "324\n");
+    w("sys/class/power_supply/battery/charge_counter", "3980000\n");
+    w("sys/class/power_supply/battery/charge_full", "5008000\n");
+    w("sys/class/power_supply/battery/cycle_count", "34\n");
+    w("sys/class/power_supply/battery/input_suspend", "0\n");
+    w(
+        "sys/class/power_supply/battery/battery_charging_enabled",
+        "1\n",
+    );
+    w("sys/class/power_supply/usb/online", "0\n");
+    w("sys/class/power_supply/usb/voltage_now", "5000000\n");
+    w("sys/class/power_supply/main/online", "1\n");
+    w("sys/class/power_supply/main/voltage_now", "9000000\n");
+    w("sys/class/power_supply/main/current_now", "1500000\n");
+
+    let r = PowerProbe::new(&root).read();
+    assert_eq!(r.status.as_deref(), Some("charging"));
+    assert_eq!(r.current_ua, Some(-1_240_000));
+    assert_eq!(r.voltage_uv, Some(4_120_000));
+    assert_eq!(r.pct, Some(78));
+    assert_eq!(r.temp_c, Some(32.4));
+    assert_eq!(r.charge_counter_uah, Some(3_980_000));
+    assert_eq!(r.charge_full_mah, Some(5008));
+    assert_eq!(r.cycle_count, Some(34));
+    assert_eq!(r.input_suspend, Some(false));
+    assert_eq!(r.charge_enabled, Some(true));
+    let input = r.input.expect("online main rail");
+    assert_eq!(input.name, "main");
+    assert_eq!(input.online, Some(true));
+    assert_eq!(input.voltage_uv, Some(9_000_000));
+    assert_eq!(input.current_ua, Some(1_500_000));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn power_probe_uses_usb_uevent_fallback() {
+    let root = tmpdir("power-usb");
+    let w = |rel: &str, body: &str| {
+        let p = root.join(rel);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(p, body).unwrap();
+    };
+    w(
+        "sys/class/power_supply/usb/uevent",
+        "POWER_SUPPLY_NAME=usb\n\
+         POWER_SUPPLY_ONLINE=1\n\
+         POWER_SUPPLY_VOLTAGE_NOW=4748096\n\
+         POWER_SUPPLY_INPUT_CURRENT_NOW=1317690\n\
+         POWER_SUPPLY_REAL_TYPE=USB_CDP\n",
+    );
+    let input = PowerProbe::new(&root).read().input.expect("usb rail");
+    assert_eq!(input.name, "usb");
+    assert_eq!(input.online, Some(true));
+    assert_eq!(input.voltage_uv, Some(4_748_096));
+    assert_eq!(input.current_ua, Some(1_317_690));
+    assert_eq!(input.kind.as_deref(), Some("USB_CDP"));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn missing_power_tree_is_all_none() {
+    let root = tmpdir("power-empty");
+    assert_eq!(PowerProbe::new(&root).read(), PowerReading::default());
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn zone_discovery_falls_back_in_priority_order() {
     let root = tmpdir("zones");
     let w = |rel: &str, body: &str| {

@@ -4,6 +4,47 @@
 > (`EVIDENCE-DEVICE`, `EVIDENCE-THERMAL`, `HISTORY`, `OPEN-QUESTIONS`);
 > older entries below still name the original paths.
 
+## 0.11.0 — 2026-11-26 (Power usage: read-only charging + history)
+
+- **Power usage screen (read-only).** Home → Power shows live battery-side
+  current, watt, voltage, temperature, charger input (when the kernel exposes
+  a rail), battery health and warnings for `input_suspend=1`,
+  `battery_charging_enabled=0`, or a status/current mismatch. No charge
+  control is added; the fast sampler never writes a sysfs/proc node.
+- **Daemon-owned history.** A dedicated sampler reads battery/charger sysfs
+  every **3 s screen-on / 30 s screen-off** and aggregates **one-minute
+  buckets** into append-only `power-history.jsonl` (7-day retention,
+  all-time `power-peaks.json`). A clean exit closes the in-progress bucket;
+  SIGKILL loses at most one minute. Clear deletes both files and resets the
+  in-memory ring.
+- **Attribution.** Buckets carry the active Device Profile (including Sleep)
+  and the last real foreground package only while the screen is on and
+  unlocked. The app derives time-weighted per-profile and per-app averages
+  (apps need 2+ minutes), charge sessions (added mAh, duration, peak) and the
+  all-time peak tiles.
+- **Protocol (v3, additive).** `power {watch, window_s?}`, `power_clear`;
+  events `power` (snapshot: `window_s`, `live`, `current_bucket`, `history`,
+  `peaks`) and `power_live` (`sample`, in-progress `bucket`). Window clamped
+  10 min–7 d; `power` replies use the reliable path.
+- **UI.** Live card, charge-session card, signed power chart (1h/6h/24h,
+  positive = usage / negative = charging, screen-off strip), peak record,
+  by-profile and by-app lists, clear confirmation, and a service-off CTA.
+  Formatting/aggregation lives in pure Kotlin (`PowerFormat`/`PowerAggregate`)
+  with JVM tests.
+- **Internal split.** `daemon/proto.rs`'s stdout `Publisher` moved to
+  `daemon/publisher.rs` and the PID guard to `daemon/instance.rs` to keep the
+  file budget (no behaviour change).
+- Host: new Rust unit tests (probe/bucket/store/retention/peaks) + a real
+  daemon E2E (fake tree, live stream, history, peaks, screen-off context,
+  clear) + Kotlin parser/model tests.
+- Device E2E (surya, 2026-11-26): live 797 mA / 3.51 W at 85% matched sysfs
+  (`current_now=-798645 µA`, `voltage_now=4403272 µV`); `usb (USB_CDP)`
+  reported via `uevent`; `input_suspend=1` showed the bypass warning and
+  restored to 0; screen-off Sleep bucket (2 samples/60 s), per-app/profile
+  rows, peaks, Clear (files deleted, live continues), history survived
+  Service OFF/ON, and the full 19/19 stock restore kept the Power CTA while
+  off. Evidence: `docs/HISTORY.md`.
+
 ## 0.10.0 — 2026-11-24 (per-app render scale + optional display scale)
 
 - **Per-app render scale (opt-in, default OFF).** Uses the Android 12

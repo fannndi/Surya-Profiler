@@ -13,13 +13,16 @@ assumption re-audited on:
 
 ## Status
 
-- Rust engine + daemon: **211 unit tests + 19 daemon E2E pass**, clippy/fmt clean.
-- Android app: **24 JVM tests**, builds (`app-debug.apk`) and is device-tested.
-- Device E2E: **passed 2026-11-24** for v0.10.0 (per-app 0.8 render scale
-  with `mCompatFrame=864×1920`, display `hd` 720p/320 with exact
-  density-400 restore, combined 576×1280, force-stop exit restore), v0.9.0
-  (thread placement, thermal repair, UFS health), v0.8.0 (floor audit/logs)
-  and the earlier suites. Evidence: [docs/HISTORY.md](docs/HISTORY.md).
+- Rust engine + daemon: **222 unit tests + 20 daemon E2E pass**, clippy/fmt clean.
+- Android app: **40 JVM tests**, builds (`app-debug.apk`) and is device-tested.
+- Device E2E: **passed 2026-11-26** for v0.11.0 (Power usage: live
+  797 mA/3.51 W at 85% vs kernel `-798645 µA`/`4403272 µV`, USB_CDP input
+  via uevent, bypass warning, screen-off Sleep bucket, per-app/profile rows,
+  Clear, history across Service OFF/ON, 19/19 stock restore), and 2026-11-24
+  for v0.10.0 (per-app 0.8 render scale with `mCompatFrame=864×1920`,
+  display `hd` 720p/320 with exact density-400 restore, combined 576×1280,
+  force-stop exit restore), v0.9.0 (thread placement, thermal repair, UFS
+  health) and the earlier suites. Evidence: [docs/HISTORY.md](docs/HISTORY.md).
 
 ## Features
 
@@ -40,6 +43,7 @@ assumption re-audited on:
 | Custom thermal | Active Device Profile selects a custom encrypted `mi_thermald` config (balance/game/powersave/sleep). The map is generated from the vendor map plus private `sconfig` 60–63; stock MIUI is the fallback. |
 | MIUI thermal awareness | Decodes PowerKeeper scenario IDs/offsets, shows MIUI performance mode, and yields to camera/phone/ARVR/performance while keeping custom thermal for video/game/benchmark. |
 | Diagnostics | Read-only daemon/env/thermal/history/log, MIUI `sconfig`, scenario, caps, cooling states, takeover state and the newest `mi_thermald` throttle events. |
+| Power usage | Read-only live charging/usage (mA, battery-side W, voltage, temperature, charger input when exposed), 3 s/30 s sampling, 1-minute history chart (1h/6h/24h), charge sessions, all-time peaks, per-profile and per-app averages. Daemon-owned JSONL history; no charge control. |
 | Background | Settings shows a live battery-optimization exemption check; `doctor` adds MIUI whitelist/appops/millet checks. |
 
 Removed on purpose: per-app DND, refresh-rate follow, charge limit,
@@ -71,7 +75,8 @@ Compose UI ──► HomeViewModel ───────────────
   Android-only signals (screen/keyguard).
 - `config.json` is app-owned and written atomically; the daemon reads it at
   start, on `config_changed`, and on mtime changes.
-- State lives in `/data/adb/suryaprofiler/`; the binary is deployed to
+- State lives in `/data/adb/suryaprofiler/` (including append-only
+  `power-history.jsonl` + `power-peaks.json`); the binary is deployed to
   `/data/local/tmp/suryaprofiler/surya-prof`.
 
 ### Config schema 2

@@ -40,7 +40,7 @@ Compose UI ──► ViewModel ──► DynamicProfileService / DaemonLink ─�
 | `core/src/engine/probe.rs` | read-only capture + options |
 | `core/src/engine/plan.rs` + `plan/` | validated plan, write rank, invariants |
 | `core/src/engine/apply/` | snapshot → guarded writes → verify → restore |
-| `core/src/engine/env/` | telemetry (model/parsers/sampler/scenario/sysfs) |
+| `core/src/engine/env/` | telemetry (model/parsers/sampler/scenario/sysfs/power probe) |
 | `core/src/engine/thermal_*.rs` | MIUI `sconfig` decoder + `mi_thermald` dump parser |
 | `core/src/diagnose/` | `doctor` (battery/miui/env/thermal checks) |
 | `core/src/daemon/arbiter/` | pure decision table |
@@ -49,6 +49,9 @@ Compose UI ──► ViewModel ──► DynamicProfileService / DaemonLink ─�
 | `core/src/daemon/bridge/affinity/` | opt-in Game thread placement: rules, `/proc` scan, `taskset`, capture/restore |
 | `core/src/daemon/bridge/downscale/` | per-app render scale: AOSP `cmd game downscale`, prior capture, restore |
 | `core/src/daemon/bridge/display/` | optional global display presets: exact 20:9 `wm size`/density, capture/restore |
+| `core/src/daemon/power/` | read-only 3 s/30 s power sampler, one-minute buckets, peaks, JSONL history |
+| `core/src/daemon/publisher.rs` | stdout JSON-lines writer (bounded queue, backpressure policy) |
+| `core/src/daemon/instance.rs` | PID-file single-writer guard |
 | `core/src/main.rs` | binary entry |
 | `core/src/cli.rs` + `cli/commands.rs` | CLI dispatch and one-shot commands |
 | `core/src/platform.rs` | process runner with hard timeout (output drained) |
@@ -62,7 +65,7 @@ Compose UI ──► ViewModel ──► DynamicProfileService / DaemonLink ─�
 | `config/` | `AppConfig` + pure `ConfigCodec` (schema/migration) |
 | `core/` | `RootBridge` (su/deploy), `FtClient`, engine facade, labels |
 | `dynamic/` | FGS, daemon process, state, stock restore, receivers/tile |
-| `ui/` | Home, Apps, Settings, Diagnostics, reusable cards/dialogs |
+| `ui/` | Home, Apps, Power, Settings, Diagnostics, reusable cards/dialogs |
 
 ## Recipes
 

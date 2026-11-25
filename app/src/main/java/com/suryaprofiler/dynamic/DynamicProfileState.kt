@@ -3,6 +3,9 @@ package com.suryaprofiler.dynamic
 import com.suryaprofiler.protocol.DiagInfo
 import com.suryaprofiler.protocol.EnvSnapshot
 import com.suryaprofiler.protocol.HealsInfo
+import com.suryaprofiler.protocol.PowerBucket
+import com.suryaprofiler.protocol.PowerSample
+import com.suryaprofiler.protocol.PowerSnapshot
 import com.suryaprofiler.protocol.StatEntry
 
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,6 +76,50 @@ object DynamicProfileState {
 
     /** Auto-revive watchdog totals (from the same `stats` reply). */
     val heals = MutableStateFlow(HealsInfo())
+
+    /** Latest `power` reply (history window + peaks). */
+    val powerSnapshot = MutableStateFlow<PowerSnapshot?>(null)
+
+    /** Latest live power sample while the Power screen is open. */
+    val powerLive = MutableStateFlow<PowerSample?>(null)
+
+    /** In-progress buckets received live since the last snapshot. */
+    val powerLiveBuckets = MutableStateFlow<List<PowerBucket>>(emptyList())
+
+    /**
+     * Replaces the snapshot; live buckets restart at the daemon's current
+     * partial bucket (completed history is already in the snapshot).
+     */
+    fun onPowerSnapshot(snap: PowerSnapshot) {
+        powerSnapshot.value = snap
+        powerLive.value = snap.live
+        powerLiveBuckets.value = listOfNotNull(snap.currentBucket)
+    }
+
+    /** Merges one live bucket by `tMs`; bounded to two days of minutes. */
+    fun onPowerLive(sample: PowerSample, bucket: PowerBucket?) {
+        powerLive.value = sample
+        if (bucket == null) return
+        val list = powerLiveBuckets.value
+        val i = list.indexOfLast { it.tMs == bucket.tMs }
+        powerLiveBuckets.value = if (i >= 0) {
+            list.toMutableList().also { it[i] = bucket }
+        } else {
+            (list + bucket).takeLast(2880)
+        }
+    }
+
+    /** Stop showing a live sample after watch=false (Home row must not stale). */
+    fun clearPowerLive() {
+        powerLive.value = null
+    }
+
+    /** Local reset for Service OFF / Clear before the next daemon reply. */
+    fun resetPower() {
+        powerSnapshot.value = null
+        powerLive.value = null
+        powerLiveBuckets.value = emptyList()
+    }
 
     /** In-app relay of the daemon's stderr log (capped, timestamped). */
     val logs = MutableStateFlow<List<String>>(emptyList())

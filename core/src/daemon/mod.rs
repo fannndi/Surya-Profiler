@@ -12,7 +12,10 @@
 //! - `settings.rs`      live saver flag via the `settings` CLI
 //! - `watcher.rs`       logcat foreground stream + dumpsys peek/probe
 //! - `env.rs`           environment sampler thread (read-only telemetry)
+//! - `power/`           fast battery/charger sampler + power history
 //! - `stats.rs`         transition history (bounded, persisted)
+//! - `publisher.rs`     stdout JSON-lines writer thread
+//! - `instance.rs`      PID-file single-writer guard
 //! - `bridge/`          saver follow + R&D input suspend (holds/restore)
 //! - `mod.rs`           this file: state type, constants, threads, main loop
 //!
@@ -28,7 +31,10 @@ mod engine_driver;
 mod env;
 mod evaluate;
 mod freq_audit;
+mod instance;
+mod power;
 mod proto;
+mod publisher;
 mod runtime;
 mod settings;
 mod stats;
@@ -44,7 +50,9 @@ pub use bridge::thermal_files_scan;
 pub use bridge::thermal_inspect;
 pub use bridge::ReleaseReport;
 pub use freq_audit::{desired_floors, live_floors};
-pub use proto::{Command, Event, Publisher, Snapshot, VERSION};
+pub use instance::{claim_instance, ensure_no_daemon, running_pid};
+pub use proto::{Command, Event, Snapshot, VERSION};
+pub use publisher::Publisher;
 
 /// Config shape shared with `doctor` (and future tools).
 pub use config::{DaemonConfig, SCHEMA as CONFIG_SCHEMA};
@@ -96,6 +104,8 @@ enum Msg {
     },
     /// Fresh environment sample (battery / thermal / GPU busy).
     Env(Box<EnvSnapshot>),
+    /// Fresh power sample (fast battery/charger read).
+    Power(power::PowerTick),
     /// The foreground watcher stream died; the supervisor restarts it.
     WatcherDown,
     /// Worker-owned exit cleanup finished.
@@ -122,6 +132,12 @@ struct Runtime {
     // environment + history
     env: EnvSnapshot,
     stats: Stats,
+    /// Power usage ring + all-time peaks (read-only telemetry).
+    power: power::PowerHistory,
+    /// The Power screen is open: forward live samples.
+    power_watch: bool,
+    /// Screen state shared with the power sampler thread (cadence switch).
+    power_screen: Arc<AtomicBool>,
     /// False until the first apply of this daemon run: the startup decision
     /// is forced so a pack update or drift that happened while we were down
     /// is reconciled.
@@ -166,119 +182,5 @@ fn mtime(path: &Path) -> Option<std::time::SystemTime> {
     std::fs::metadata(path).ok().and_then(|m| m.modified().ok())
 }
 
-/// PID file guard: one daemon/CLI writer per state dir.
-pub struct InstanceGuard {
-    path: PathBuf,
-}
-
-impl Drop for InstanceGuard {
-    fn drop(&mut self) {
-        // Only remove the file if it still names this process; a losing
-        // starter must never delete the winner's lock.
-        let mine = std::process::id().to_string();
-        let current = std::fs::read_to_string(&self.path)
-            .ok()
-            .map(|s| s.trim().to_string());
-        if current.as_deref() == Some(mine.as_str()) {
-            let _ = std::fs::remove_file(&self.path);
-        }
-    }
-}
-
-fn pid_file(state_dir: &Path) -> PathBuf {
-    state_dir.join("daemon.pid")
-}
-
-fn pid_is_live(pid: u32) -> bool {
-    if pid == std::process::id() {
-        return true;
-    }
-    let proc_path = format!("/proc/{pid}");
-    let proc_dir = Path::new(&proc_path);
-    if !proc_dir.exists() {
-        return false;
-    }
-    // Guard against PID reuse by an unrelated process after a hard kill.
-    std::fs::read_to_string(proc_dir.join("cmdline"))
-        .map(|s| s.contains("surya-prof"))
-        .unwrap_or(false)
-}
-
-pub fn running_pid(state_dir: &Path) -> Option<u32> {
-    let raw = std::fs::read_to_string(pid_file(state_dir)).ok()?;
-    let pid = raw.trim().parse::<u32>().ok()?;
-    pid_is_live(pid).then_some(pid)
-}
-
-pub fn claim_instance(state_dir: &Path) -> Result<InstanceGuard, String> {
-    use std::io::Write;
-    let _ = std::fs::create_dir_all(state_dir);
-    let path = pid_file(state_dir);
-    for _ in 0..3 {
-        if let Some(pid) = running_pid(state_dir) {
-            return Err(format!("another daemon is running (pid {pid})"));
-        }
-        match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-        {
-            Ok(mut f) => {
-                writeln!(f, "{}", std::process::id())
-                    .map_err(|e| format!("{}: {e}", path.display()))?;
-                f.sync_all()
-                    .map_err(|e| format!("{}: fsync: {e}", path.display()))?;
-                return Ok(InstanceGuard { path });
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                // A winner may have created the file but not written the pid
-                // yet; give it a moment before treating the lock as stale.
-                for _ in 0..5 {
-                    if let Some(pid) = running_pid(state_dir) {
-                        return Err(format!("another daemon is running (pid {pid})"));
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                }
-                let _ = std::fs::remove_file(&path);
-            }
-            Err(e) => return Err(format!("{}: {e}", path.display())),
-        }
-    }
-    Err(format!(
-        "could not claim {} (another writer keeps racing)",
-        path.display()
-    ))
-}
-
-pub fn ensure_no_daemon(state_dir: &Path) -> Result<(), String> {
-    if let Some(pid) = running_pid(state_dir) {
-        Err(format!(
-            "daemon is running (pid {pid}); use the app or stop the service first"
-        ))
-    } else {
-        Ok(())
-    }
-}
-
 mod run;
 pub use run::run;
-
-#[cfg(test)]
-mod instance_tests {
-    use super::*;
-
-    #[test]
-    fn instance_lock_rejects_a_second_writer_and_ignores_stale_pid() {
-        let dir = super::test_util::tmpdir("daemon-instance");
-        std::fs::write(dir.join("daemon.pid"), "999999\n").unwrap();
-        let guard = claim_instance(&dir).expect("stale pid must not block");
-        assert!(running_pid(&dir).is_some());
-        assert!(
-            claim_instance(&dir).is_err(),
-            "second daemon must be rejected"
-        );
-        drop(guard);
-        assert!(running_pid(&dir).is_none());
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}

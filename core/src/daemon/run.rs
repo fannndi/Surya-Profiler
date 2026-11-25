@@ -101,6 +101,9 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
         profiles_mtime: mtime(&state_dir.join("profiles.json")),
         env: EnvSnapshot::default(),
         stats: Stats::load(state_dir),
+        power: power::PowerHistory::load(state_dir),
+        power_watch: false,
+        power_screen: Arc::new(AtomicBool::new(true)),
         reconciled: false,
         watchdog_tick: 0,
         floor_audit: freq_audit::FloorAudit::new(),
@@ -128,6 +131,8 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
     }
     // read-only telemetry (battery / thermal / GPU busy) for diagnostics
     env::spawn(msg_tx.clone());
+    // fast battery/charger sampling for the Power usage screen + history
+    power::spawn(msg_tx.clone(), rt.power_screen.clone());
     rt.emit_state(true);
 
     let mut next_sup = Instant::now() + Duration::from_millis(SUPERVISE_MS);
@@ -165,6 +170,7 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
                 started,
             }) => rt.on_seed(pkg, trigger, started),
             Ok(Msg::Env(snap)) => rt.on_env(*snap),
+            Ok(Msg::Power(tick)) => rt.on_power(tick),
             Ok(Msg::WatcherDown) => {
                 rt.log("foreground stream ended");
             }
@@ -235,6 +241,9 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
     if let Some(w) = rt.fg_watcher.as_mut() {
         w.stop();
     }
+    // Close the in-progress power bucket before the process exits (a clean
+    // stop loses at most one sample; SIGKILL loses the current minute).
+    rt.power.flush();
     // The worker owns every write; it quiesces, restores and reports.
     exit::shutdown_worker(&mut rt, &msg_rx, worker_handle);
     rt.publisher.emit(&Event::Bye);

@@ -28,6 +28,7 @@ const CPU7_COOLING: &str = "thermal-cpufreq-7";
 /// break the daemon — the field is simply absent.
 mod model;
 mod parsers;
+mod power;
 mod sampler;
 mod scenario;
 mod sysfs;
@@ -37,6 +38,7 @@ mod tests;
 
 pub use model::EnvSnapshot;
 pub use parsers::*;
+pub use power::{parse_battery_status, parse_bool01, InputSupply, PowerProbe, PowerReading};
 pub use sampler::Sampler;
 pub use scenario::{thermal_mode_name, thermal_scenario_label};
 pub use sysfs::{default_root, storage_health};

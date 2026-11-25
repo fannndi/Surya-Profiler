@@ -47,7 +47,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
  * the Service switch. Everything else lives in Settings.
  */
 
-private enum class HomeDest { HOME, APPS, SETTINGS, DIAGNOSTICS }
+private enum class HomeDest { HOME, APPS, POWER, SETTINGS, DIAGNOSTICS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,6 +75,9 @@ fun HomeScreen(vm: HomeViewModel) {
         HomeDest.APPS -> {
             val avm: DynamicProfileViewModel = viewModel()
             AppsProfileScreen(vm = avm, onBack = { dest = HomeDest.HOME })
+        }
+        HomeDest.POWER -> {
+            PowerScreen(onBack = { dest = HomeDest.HOME })
         }
         HomeDest.SETTINGS -> {
             SettingsScreen(
@@ -151,6 +154,11 @@ fun HomeScreen(vm: HomeViewModel) {
                             DynamicProfileRow(
                                 state = state,
                                 onToggle = vm::onDynamicToggle,
+                            )
+                        }
+                        item(key = "power") {
+                            PowerRow(
+                                onClick = { dest = HomeDest.POWER },
                             )
                         }
                         item(key = "diagnostics") {

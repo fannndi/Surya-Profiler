@@ -152,9 +152,9 @@ class DynamicProfileService : Service() {
         DynamicProfileState.running.value = false
         DynamicProfileState.reason.value = null
         DynamicProfileState.appliedProfile.value = null
-        // Do not leave stale daemon telemetry visible while the service is off.
-        DynamicProfileState.diag.value = null
+        DynamicProfileState.diag.value = null // no stale telemetry after stop
         DynamicProfileState.env.value = null
+        DynamicProfileState.resetPower()
         DynamicProfileState.stats.value = emptyList()
         DynamicProfileState.heals.value = HealsInfo()
         DynamicProfileState.clearLogs()

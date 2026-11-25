@@ -1541,3 +1541,75 @@ decode/network/panel dominan. Density tidak mengubah buffer app (tetap
 
 UI screenshots: Home pada 720p/320 tetap rapi; Settings native/720p/267/320
 dan app row badge diverifikasi.
+
+---
+
+## POWER-USAGE-2026-11-26.md
+
+## Power usage (0.11.0) — implementation, host + device evidence — 2026-11-26
+
+Scope decided with the user after auditing `Reference/vtools_en`:
+`ActivityPowerUtilization` (peak record, battery % curve, per-app average)
+and `ActivityCharge` (charge speed/capacity/time/temp). Our version adds
+battery-side watts, charger input when the kernel exposes it,
+`input_suspend`/charge-guard warnings, Device Profile attribution and
+screen-off coverage, while staying **read-only**: no charge limit/control.
+
+### Design
+
+- `engine/env/power.rs`: `PowerProbe` reads `battery` (capacity/status/
+  current/voltage/temp/charge_counter/charge_full/cycle_count/
+  input_suspend/battery_charging_enabled) and the first online input rail
+  (`usb`/`pc_port`/`main`/`dc`/`wireless`). Sign is the verified device
+  convention: negative = charging, positive = discharging.
+- `daemon/power/`: sampler 3 s screen-on / 30 s screen-off; one-minute
+  buckets; 7-day `power-history.jsonl` append-only; all-time
+  `power-peaks.json`; clean-exit flush; `power_clear`.
+- Attribution: active Device Profile (including Sleep) every sample;
+  foreground package only while screen-on **and unlocked**.
+- Protocol v3 additive: `power {watch, window_s?}` / `power_clear` ->
+  `power` snapshot + `power_live` (sample + in-progress bucket).
+- UI: Home -> Power usage; live card, charge session, signed chart
+  (1h/6h/24h + screen-off strip), peak tiles, by-profile, by-app, clear.
+  Sessions/per-app/profile math is client-side in pure Kotlin.
+
+### Host verification (2026-11-26)
+
+- `cargo fmt`, `cargo clippy --all-targets -- -D warnings`: clean.
+- Rust: **222 lib tests** (+11 power/bucket/store/probe) and **20 daemon
+  E2E** (+`daemon_power.rs`: fake tree, live stream, one-minute-equivalent
+  buckets, charge/discharge peaks, screen-off context, clear).
+- Kotlin: **40 JVM tests** (+5 parser, +11 model) and `assembleDebug`.
+- Asset lockstep: cross-built arm64 daemon is 0.11.0 and byte-identical to
+  `app/src/main/assets/surya-prof`; `check.sh` passes.
+
+### Device evidence (surya, 2026-11-26)
+
+Build: APK 0.11.0 / versionCode 13 (final APK md5
+`037505293a58bc06b0f504b5f443a899`); daemon binary md5
+`b4f08d85021c0ab947f237d4478461ac`. Android 12 / MIUI 14, plugged USB.
+
+| Step | Result |
+|---|---|
+| Read-only nodes | `battery/current_now=-798645 µA`, `voltage_now=4403272 µV`, `status=Charging`, `capacity=85`, `temp=344`, `charge_counter=3731030 µAh`, `charge_full=5111000`, `cycle_count=41`, `input_suspend=0`, `battery_charging_enabled=1` |
+| Input rail | `usb` has **no** `voltage_now`/`current_now` files; its `uevent` reports `VOLTAGE_NOW=4748096`, `INPUT_CURRENT_NOW=1317690`, `REAL_TYPE=USB_CDP`. `main` has `input_voltage_settled=5000000` / `input_current_settled=1500000` but no `online`. The probe's uevent/settled fallbacks selected `usb (USB_CDP)`. |
+| Live UI | `Charging · 85%`, 797 mA, 3.51 W, 4.40 V, 34.6 °C, health 5111 mAh / 99% of 5160 / 41 cycles, input `usb (USB_CDP) · 4.78 V · 1.18 A · 5.64 W`, est. full 1h39m — matches sysfs at the same time |
+| Bypass (Settings switch) | `input_suspend=1` → status Discharging, `+464 mA`, 1.94 W usage, warning “Charging bypass active (R&D input_suspend=1)”, est. left 8h08m; input rail still reported 5.18 V / 671 mA. Switch off → `input_suspend=0`, Charging, warning gone |
+| Session card | Transient bypass correctly changed “Charging session · now” → “Last charge session” with end time (live-direction override; the 1-min bucket average was still charge) |
+| Screen-off | A 60 s bucket with `screen_on:false`, `profile:"sleep"`, `samples:2` (deep-sleep 30 s cadence) was recorded and appeared as a Sleep profile row |
+| Stats | `By profile`: Sleep 1.41 W / 337 mA / 1m, Balance 1.03 W / 246 mA / 2m. `By app`: Surya Profiler ≈1.03 W / 246 mA / 34.9 °C avg / 35.2 °C max / 2m |
+| Peak record | `charge -802002 µA @ 4.40 V`, `discharge +545959 µA @ 4.33 V`, `temp 35.1 °C`, all timestamped; `power-peaks.json` schema 1 |
+| History | `power-history.jsonl` one line/minute (mixed bypass bucket example: avg `-365234`, min `-800171`, max `+545959`, 60 s, 20 samples); file survived Service OFF/ON and reloaded |
+| Chart | 1h/6h/24h selector works; 1h rendered signed usage (purple) / charge (orange) and the screen-off strip; 1-minute-average caveat documented |
+| Clear | Confirm dialog → both `power-history.jsonl` and `power-peaks.json` deleted; live sampling continued (new session 1 mAh / 6 s), then history re-accumulated |
+| Service OFF | Full UI path: 19/19 written, 19 verified, 0 failed; `state.active=null / last_mode=restore`, `sconfig=0`, `holds` all false; `power-history.jsonl` persisted. Power screen showed the service-off CTA. |
+| Service ON | Daemon restarted, `active=balance`, `sconfig=60`, history reloaded and a new minute appended |
+
+Final state: service ON (base balance), `sconfig=60`, `input_suspend=0`,
+`battery_charging_enabled=1`, `holds.json` healthy, app on the Power screen.
+No power node was written by the new feature; the only charge write was the
+existing R&D switch, restored to 0.
+
+Known caveat: short charge/usage switches inside one minute are averaged in
+the chart (the live card and peak record still show the instantaneous
+extremes). This is documented in the chart caption.

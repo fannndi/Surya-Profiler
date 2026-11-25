@@ -72,6 +72,11 @@ class DaemonEventRouter(
 
             is DaemonEvent.Env -> DynamicProfileState.env.value = event.env
 
+            is DaemonEvent.Power -> DynamicProfileState.onPowerSnapshot(event.snapshot)
+
+            is DaemonEvent.PowerLive ->
+                DynamicProfileState.onPowerLive(event.sample, event.bucket)
+
             is DaemonEvent.Diag -> {
                 event.diag?.let {
                     DynamicProfileState.diag.value = it

@@ -57,6 +57,7 @@ impl Runtime {
                 let was_on = self.screen_on;
                 self.screen_on = on;
                 self.locked = locked;
+                self.power_screen.store(on, Ordering::Relaxed);
                 if !on {
                     self.fg_debounce = None;
                     if was_on {
@@ -192,6 +193,24 @@ impl Runtime {
                     heals_total: Some(self.stats.heals_total),
                     heals_last_t: Some(self.stats.heals_last_t),
                     heals_last_keys: Some(self.stats.heals_last_keys),
+                });
+            }
+            Command::Power { watch, window_s } => {
+                self.power_watch = watch;
+                if watch {
+                    let window_s = window_s.unwrap_or(crate::daemon::power::DEFAULT_WINDOW_S);
+                    let snapshot = self.power.snapshot(window_s);
+                    self.publisher.emit_reliable(&Event::Power {
+                        snapshot: Box::new(snapshot),
+                    });
+                }
+            }
+            Command::PowerClear => {
+                self.power.clear();
+                self.log("power: history cleared");
+                let snapshot = self.power.snapshot(crate::daemon::power::DEFAULT_WINDOW_S);
+                self.publisher.emit_reliable(&Event::Power {
+                    snapshot: Box::new(snapshot),
                 });
             }
         }

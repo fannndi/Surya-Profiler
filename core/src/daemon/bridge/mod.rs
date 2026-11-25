@@ -55,7 +55,7 @@ pub fn clean_holds(state_dir: &Path) -> ReleaseReport {
     report
 }
 
-use super::proto::Publisher;
+use super::Publisher;
 use crate::daemon::settings;
 use crate::daemon::settings::LiveFlags;
 use holds::{Holds, HoldsFile};

@@ -19,6 +19,14 @@ object DaemonCommands {
 
     fun stats() = JSONObject().put("cmd", "stats")
 
+    /** Power history; [watch] also starts/stops the live sample stream. */
+    fun power(watch: Boolean, windowS: Long = 86_400) = JSONObject()
+        .put("cmd", "power")
+        .put("watch", watch)
+        .put("window_s", windowS)
+
+    fun powerClear() = JSONObject().put("cmd", "power_clear")
+
     fun configChanged() = JSONObject().put("cmd", "config_changed")
 
     fun userPresent() = JSONObject().put("cmd", "user_present")

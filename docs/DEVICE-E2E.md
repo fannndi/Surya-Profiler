@@ -50,6 +50,25 @@ MIUI 14, root APatch.
       thermal without the app.
 - [ ] `battery_charging_enabled=1`, `low_power=0`.
 - [ ] Sleep→wake with Game as base: `core_ctl` little cluster 6/6, not 2/6.
+> Power usage was verified on surya on 2026-11-26 (0.11.0); see
+> `docs/HISTORY.md` for the measurements. Re-run after engine changes.
+
+- [ ] Power usage: Home → Power shows live `current_now`/voltage matching
+      `su -c 'cat /sys/class/power_supply/battery/{current_now,voltage_now,status}'`
+      (negative current = charging, positive = discharging).
+- [ ] Plug/unplug: status, mA and watt flip within one 3 s sample; the
+      chart's positive/negative segments match.
+- [ ] R&D input_suspend ON while plugged: live card shows the bypass warning
+      (and/or `battery_charging_enabled=0` guard warning); release restores.
+- [ ] After 2 min in one app: the "By app" row appears with avg mA/W, temp and
+      duration; "By profile" shows the active profile and Sleep after screen off.
+- [ ] History file grows one line/minute under
+      `/data/adb/suryaprofiler/power-history.jsonl`; Service restart reloads it.
+- [ ] Clear: confirm dialog empties history/peaks, deletes both files, live
+      sampling continues; no tuning/charging value changed.
+- [ ] Service OFF: Power screen shows the service-off CTA; no new power
+      samples/files are written (existing history persists). Force-stop/clean
+      exit flushes the current bucket.
 - [ ] `surya-prof apply` while the daemon is alive is rejected (single writer).
 - [ ] Force-stop the app: `surya-prof status` shows `active=null`, `last_mode=restore`.
 - [ ] `doctor --config /data/data/com.suryaprofiler/files/config.json`:

@@ -5,6 +5,7 @@
 //! snapshot emission + applied/restored handling; see `commands.rs`
 //! (dispatch) and `evaluate.rs` (decision + supervisor).
 
+use super::power::{PowerSample, PowerTick};
 use super::worker;
 use super::worker::RestoredEvent;
 use super::Runtime;
@@ -58,6 +59,33 @@ impl Runtime {
         self.publisher.emit(&Event::Env {
             env: Box::new(self.env.clone()),
         });
+    }
+
+    /// Fast power tick: feed the ring and forward the sample when the Power
+    /// screen is watching. A missing current/voltage node still updates the
+    /// live sample (status/temperature) but creates no history bucket.
+    pub(super) fn on_power(&mut self, tick: PowerTick) {
+        // Never attribute a locked/off panel to the last app: the lock screen
+        // is not that app's foreground time.
+        let pkg = if self.screen_on && !self.locked {
+            self.last_real.clone()
+        } else {
+            None
+        };
+        let sample = PowerSample::from_reading(
+            crate::daemon::power::now_ms(),
+            tick.reading,
+            self.screen_on,
+            pkg,
+            self.active.clone(),
+        );
+        let bucket = self.power.record(&sample, tick.interval_ms);
+        if self.power_watch {
+            self.publisher.emit(&Event::PowerLive {
+                sample: Box::new(sample),
+                bucket: bucket.map(Box::new),
+            });
+        }
     }
 
     pub(super) fn on_applied(&mut self, ev: worker::AppliedEvent) {

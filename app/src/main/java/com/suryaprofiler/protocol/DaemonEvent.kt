@@ -36,6 +36,13 @@ sealed interface DaemonEvent {
 
     data class Env(val env: EnvSnapshot) : DaemonEvent
 
+    data class Power(val snapshot: PowerSnapshot) : DaemonEvent
+
+    data class PowerLive(
+        val sample: PowerSample,
+        val bucket: PowerBucket?,
+    ) : DaemonEvent
+
     data class Diag(
         val diag: DiagInfo?,
         val env: EnvSnapshot?,
@@ -118,6 +125,20 @@ sealed interface DaemonEvent {
             )
 
             "env" -> Env(DiagnosticsParse.env(json))
+
+            "power" -> Power(PowerParse.snapshot(json))
+
+            "power_live" -> {
+                val sample = json.optJSONObject("sample")?.let(PowerParse::sample)
+                if (sample == null) {
+                    Unknown(json)
+                } else {
+                    PowerLive(
+                        sample = sample,
+                        bucket = json.optJSONObject("bucket")?.let(PowerParse::bucket),
+                    )
+                }
+            }
 
             "diag" -> Diag(
                 diag = DiagnosticsParse.diag(json),
