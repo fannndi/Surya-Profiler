@@ -93,3 +93,39 @@ fn input_suspend_hold_assumes_stock_when_capture_missing() {
     let (_, a2) = n.request_input_suspend(Some("1".into()), false);
     assert!(matches!(a2, InputSuspendAction::Release(None)));
 }
+
+#[test]
+fn unowned_live_input_suspend_one_is_released_before_a_new_hold() {
+    let s = Holds::default();
+    let (next, action) = s.request_input_suspend(Some("1".into()), true);
+    assert!(
+        matches!(action, InputSuspendAction::Release(Some(ref v)) if v == "0"),
+        "an orphan must be treated as stock 0, never captured as stock 1"
+    );
+    assert!(!next.input_suspend_held);
+    assert!(next.input_suspend_saved.is_none());
+
+    // The following sync can now capture the released stock value and engage.
+    let (held, engage) = next.request_input_suspend(Some("0".into()), true);
+    assert!(matches!(engage, InputSuspendAction::Engage));
+    assert_eq!(held.input_suspend_saved.as_deref(), Some("0"));
+}
+
+#[test]
+fn unowned_live_input_suspend_one_is_released_even_when_not_wanted() {
+    let (next, action) = Holds::default().request_input_suspend(Some("1".into()), false);
+    assert!(matches!(action, InputSuspendAction::Release(Some(ref v)) if v == "0"));
+    assert!(!next.input_suspend_held);
+}
+
+#[test]
+fn persisted_input_suspend_hold_keeps_its_restore_point() {
+    let held = Holds {
+        input_suspend_held: true,
+        input_suspend_saved: Some("0".into()),
+        ..Default::default()
+    };
+    let (next, action) = held.request_input_suspend(Some("1".into()), true);
+    assert!(matches!(action, InputSuspendAction::Keep));
+    assert_eq!(next.input_suspend_saved.as_deref(), Some("0"));
+}

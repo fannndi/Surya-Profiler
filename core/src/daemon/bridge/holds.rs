@@ -177,6 +177,11 @@ impl Holds {
         live: Option<String>,
         want: bool,
     ) -> (Holds, InputSuspendAction) {
+        // A live 1 without a persisted hold is an orphan from a crashed run,
+        // not a legitimate stock value. Release it before any new capture.
+        if !self.input_suspend_held && live.as_deref() == Some("1") {
+            return (self.clone(), InputSuspendAction::Release(Some("0".into())));
+        }
         match (want, self.input_suspend_held) {
             (true, false) => (
                 Holds {

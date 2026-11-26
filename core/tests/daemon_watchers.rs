@@ -16,6 +16,10 @@ case "$*" in
     echo "$EPOCH  1234  1234 I wm_resume_activity: [0,1,2,com.YoStarEN.AzurLane/.Main]"
     ;;
   *)
+    if [ "${SURYAPROFILER_SILENT_STREAM:-0}" = "1" ]; then
+      sleep 120
+      exit 0
+    fi
     EPOCH=$(date +%s.%3N)
     echo "$EPOCH  1234  1234 I wm_resume_activity: [0,1,2,com.whatsapp/.Main]"
     i=0
@@ -37,6 +41,40 @@ esac
     let mut perms = std::fs::metadata(&path).unwrap().permissions();
     perms.set_mode(0o755);
     std::fs::set_permissions(&path, perms).unwrap();
+}
+
+#[test]
+fn startup_peek_keeps_mapped_foreground_with_a_silent_stream() {
+    let dir = tmp("e2e-startup-peek");
+    write_fake_logcat(&dir);
+    std::fs::write(
+        dir.join("config.json"),
+        r#"{"schema":2,"enabled":true,"dynamic":true,"base_profile":"balance",
+            "app_map":{"com.YoStarEN.AzurLane":"game"}}"#,
+    )
+    .unwrap();
+
+    let logcat = dir.join("fake-logcat.sh");
+    let mut d = Daemon::spawn_env(
+        &dir.join("state"),
+        &dir.join("config.json"),
+        &[
+            ("SURYAPROFILER_LOGCAT_BIN", logcat.to_str().unwrap()),
+            ("SURYAPROFILER_SILENT_STREAM", "1"),
+        ],
+    );
+
+    d.send(json!({"cmd":"hello"}));
+    let applied = d.wait_for(
+        |v| v["event"] == "applied" && v["profile"] == "game",
+        Duration::from_secs(45),
+    );
+    assert_eq!(applied["reason"], "app");
+    assert_eq!(applied["src_pkg"], "com.YoStarEN.AzurLane");
+
+    d.send(json!({"cmd":"shutdown"}));
+    d.wait_for(|v| v["event"] == "bye", Duration::from_secs(5));
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

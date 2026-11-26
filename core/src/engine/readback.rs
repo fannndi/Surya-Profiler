@@ -13,7 +13,10 @@ use crate::engine::catalog::Kind;
 /// not just accepted as "framework winning".
 pub fn readback_matches_exact(kind: Kind, resolved: &str, rb: &str) -> bool {
     match kind {
-        Kind::Freq | Kind::FreqMin | Kind::FreqMax => rb.trim() == resolved,
+        // A stricter live maximum is still an external safety cap. Reconcile
+        // must repair a lost/too-high cap, never raise a lower one.
+        Kind::FreqMax => readback_matches(kind, resolved, rb),
+        Kind::Freq | Kind::FreqMin => rb.trim() == resolved,
         _ => readback_matches(kind, resolved, rb),
     }
 }

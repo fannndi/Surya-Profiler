@@ -54,12 +54,17 @@ impl Bridge {
         let changed = next != st.holds;
         match action {
             SaverAction::TurnOn => {
+                let previous = st.holds.clone();
                 // Write-ahead: a crash after the device write but before the
                 // hold was persisted would otherwise leave low_power=1 with no
                 // restore point. Persist first, then write; a failed write is
                 // retried by the next sync (the hold stays engaged).
                 st.holds = next;
-                self.persist(st);
+                if let Err(e) = self.persist(st) {
+                    st.holds = previous;
+                    self.log_event(format!("MIUI saver hold persist failed: {e}"));
+                    return false;
+                }
                 match settings::put("global", settings::SAVER_KEY, "1") {
                     Ok(()) => {
                         self.log_event(format!(

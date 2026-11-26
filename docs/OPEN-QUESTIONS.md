@@ -194,7 +194,7 @@ Hal yang belum cukup bukti dan perlu diputuskan sebelum implementasi final.
   reboot/persistence needs a device run; per-app 65/70 choice for video apps
   is user preference, not a guaranteed battery win.
 
-## 16. Power usage — implemented 0.11.0 (host-verified)
+## 16. Power usage — implemented 0.11.0 (device-verified)
 
 - **Read-only:** 3 s screen-on / 30 s screen-off sampler; one-minute buckets;
   7-day `power-history.jsonl`; all-time `power-peaks.json`; clear; clean-exit
@@ -222,3 +222,30 @@ Hal yang belum cukup bukti dan perlu diputuskan sebelum implementasi final.
   detection path); a different fuel gauge may use the opposite current sign
   and needs a fresh audit. Short charge/usage switches inside one minute are
   averaged in the chart (live card + peaks keep the extremes).
+
+## 17. Phase 0 safety + telemetry integrity — resolved 2026-11-26
+
+- Startup peek/sequencing, periodic foreground fallback, lock-screen base,
+  two-phase saver/thermal sync, offset-safe thermal release, stricter-cap
+  preservation, orphan input-suspend recovery, durable write-ahead holds and
+  the `flock` single-writer guard are implemented and host-verified.
+- Power elapsed-time aggregation, same-minute merge/replay dedupe, legacy
+  history healing, zero-duration extrema, peak reconciliation, fail-closed
+  Clear and reconnect-aware UI are implemented.
+- Device final build verified history healing (70 rows → 67 minutes), Power
+  reconnect after SIGKILL, crash-hold recovery, camera yield and MIUI
+  `sconfig=12` preservation through a 19/19 Service OFF restore. See
+  `HISTORY.md` → `PHASE-0-2026-11-26.md`.
+- Still open: live orphan `input_suspend=1` injection was SELinux-denied;
+  host coverage exists, device re-test needs a permitting policy.
+
+## 18. Scenario-aware optimization + cross-scenario A/B — next
+
+- Add a read-only `ScenarioObserver` before any new tuning policy. It must
+  distinguish video/PiP, short-form video, browsing/navigation, gaming,
+  split-screen and Sleep without taking ownership away from MIUI.
+- Keep refresh/DFPS, CPU screen-on floors, thermal safety scenarios and power
+  mode MIUI-owned. Power telemetry stays read-only.
+- User-approved device matrix: YouTube + PiP, TikTok, Chrome, Google Maps,
+  Seven Knights, split-screen and Sleep; use controlled A/B runs with the
+  existing Power history and verify exact stock/MIUI restore after each run.

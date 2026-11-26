@@ -59,22 +59,25 @@ pub(crate) fn yield_value(live: Option<i32>, perf: bool) -> Option<i32> {
 }
 
 /// Force a stock scenario while MIUI's performance mode is active. Camera /
-/// phone / ARVR and stock-map scenarios stay as MIUI set them; our private
-/// indices, default/foreground values and unknown IDs are moved to MIUI's
-/// performance `sconfig=1` (which resolves to vendor normal on this ROM).
-pub(crate) fn force_perf_stock(live: Option<i32>) -> Result<Option<i32>, String> {
-    if live == Some(1) {
-        return Ok(live);
+/// phone / ARVR and every known MIUI scenario stay as MIUI set them; our
+/// private indices, default values and unknown IDs move to performance
+/// `sconfig=1` (which resolves to vendor normal on this ROM).
+///
+/// The value to force, or `None` when the live MIUI scenario must be preserved.
+pub(crate) fn perf_stock_target(live: Option<i32>, legacy_owned: bool) -> Option<i32> {
+    match live {
+        Some(1) => None,
+        Some(v) if is_custom_index(v) || (legacy_owned && is_legacy_index(v)) => Some(1),
+        Some(0) => Some(1),
+        Some(v) if thermal_scenario::is_miui_owned(v) => None,
+        _ => Some(1),
     }
-    let force = match live {
-        Some(v) if is_custom_index(v) || is_legacy_index(v) => true,
-        Some(0) => true,
-        Some(v) if thermal_scenario::has_vendor_map_entry(v) => false,
-        _ => true,
-    };
-    if force {
-        write_text(&sconfig_path(), "1\n")?;
-        Ok(Some(1))
+}
+
+pub(crate) fn force_perf_stock(live: Option<i32>) -> Result<Option<i32>, String> {
+    if let Some(target) = perf_stock_target(live, marker_path().exists()) {
+        write_text(&sconfig_path(), &format!("{target}\n"))?;
+        Ok(Some(target))
     } else {
         Ok(live)
     }

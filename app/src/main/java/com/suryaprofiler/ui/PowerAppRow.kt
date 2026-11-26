@@ -62,7 +62,7 @@ internal fun PowerAppRow(stat: AppPowerStat) {
             Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
             Text(
                 listOfNotNull(
-                    "≈ ${formatPower(stat.avgMw)}",
+                    "≈ ${formatPowerWithDirection(stat.avgMw)}",
                     formatCurrent(stat.avgUa.roundToLong()),
                     stat.avgTempC?.let {
                         String.format(Locale.US, "%.1f °C avg", it)

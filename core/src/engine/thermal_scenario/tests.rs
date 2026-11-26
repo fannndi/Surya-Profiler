@@ -104,3 +104,16 @@ fn vendor_map_ids_are_the_stock_subset() {
         assert!(!has_vendor_map_entry(v), "{v}");
     }
 }
+
+#[test]
+fn decoded_miui_scenarios_are_owned_without_a_raw_map_entry() {
+    // PowerKeeper can select base scenarios with offsets even though the
+    // vendor map only contains the un-offset IDs. These remain MIUI's values.
+    for v in [112, 108, 117, 118] {
+        assert!(!has_vendor_map_entry(v), "{v} has no raw vendor-map entry");
+        assert!(is_miui_owned(v), "{v} must stay MIUI-owned");
+    }
+    for v in [25, 60, 70, 999] {
+        assert!(!is_miui_owned(v), "{v} is not a known MIUI value");
+    }
+}

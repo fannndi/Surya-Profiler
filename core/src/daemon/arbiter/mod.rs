@@ -104,7 +104,10 @@ pub fn decide(i: &ArbiterInput) -> Decision {
     }
 
     if i.keyguard_locked {
-        return Decision::None;
+        return Decision::Apply {
+            profile: i.base_profile.clone(),
+            reason: "locked".into(),
+        };
     }
 
     // dual-app concurrency overrides mapping AND saver: two visible apps

@@ -1613,3 +1613,71 @@ existing R&D switch, restored to 0.
 Known caveat: short charge/usage switches inside one minute are averaged in
 the chart (the live card and peak record still show the instantaneous
 extremes). This is documented in the chart caption.
+
+---
+
+## PHASE-0-2026-11-26.md
+
+## Phase 0 safety + telemetry integrity — 2026-11-26
+
+### Scope
+
+Stabilize the daemon/service and Power telemetry before scenario-aware
+optimization. No refresh/DFPS, MIUI power-mode, charge-control or new sysfs
+surface was added.
+
+- Startup foreground peek + stale-result sequencing; periodic `dumpsys`
+  fallback; lock screen returns to the universal base.
+- Two-phase bridge sync updates saver attribution before slow thermal work.
+- Thermal release preserves decoded MIUI offset scenarios (`112`, `108`,
+  `117`, `118`, …); forced reconcile never raises a stricter external cap.
+- Unowned `input_suspend=1` recovery; atomic/fsynced write-ahead hold storage;
+  fail-closed recovery when a live thermal takeover has no trustworthy holds.
+- OS-backed exclusive `flock` (`daemon.lock`) replaces the PID create/unlink
+  race; `daemon.pid` remains diagnostic only.
+- Power uses actual elapsed time, wakes on screen changes, joins before final
+  flush, merges same-minute segments, dedupes durable replays, reconciles
+  peaks, heals legacy duplicate-minute files on load, and makes Clear
+  fail-closed. A zero-duration first reading contributes extrema/peaks without
+  creating a represented-time row.
+- Protocol v3 adds segment bounds/energy/ID; the app invalidates stale live
+  data on disconnect and resubscribes after the hello handshake.
+
+### Host verification
+
+- `./scripts/check.sh`: **264 Rust unit tests**, **21 daemon E2E**, **54 Kotlin
+  JVM tests**, fmt/clippy/architecture/asset lockstep and APK build all pass.
+- The Power E2E exposed and verified the zero-duration-first-reading fix:
+  charge/discharge extrema survive a direction change before the first
+  interval, while suspend gaps still create no bucket.
+
+### Device evidence (surya, final 0.11.0)
+
+Final daemon md5 `b14e4fe1b55b704730b1c1024372f9c3`; APK md5
+`6db01e7720f11fedbb8d1914f072ad7b`; deployed binary md5 matched.
+
+| Step | Result |
+|---|---|
+| Startup | `seed: peeked=Some("com.suryaprofiler")` → `balance (base)`; `sconfig=60` |
+| Legacy history heal | Startup log `history: merged 70 rows into 67 unique minutes`; the JSONL file was atomically rewritten (new size/mtime) |
+| Power reconnect | Power screen showed live 677 mA / 2.88 W; SIGKILL daemon PID 3778 → supervisor restarted PID 4986, recovered holds, reapplied Balance and live sampling resumed |
+| Crash recovery | Restart log `bridge: recovered holds from previous run`; custom thermal map refreshed and `sconfig=60` restored without a second writer |
+| Camera ownership | Camera foreground → `bridge: thermal: yielding to MIUI camera`, `sconfig=12` |
+| Service OFF | `restore: ok=true wrote=19 verified=19 failed=0`; every release report true; `active=null / last_mode=restore`; daemon exited |
+| MIUI scenario preserved | After Service OFF, `sconfig=12` (camera) remained; `doctor` reported `scenario:"camera"`, `marker:false`, no custom/legacy indices, `thermal_takeover.pass:true` |
+| Stock safety state | `input_suspend=0`, `battery_charging_enabled=1`, `low_power=0`, `wm size=1080x2400`, override density 400; `holds.json` all false/empty |
+| Doctor | Overall `ok:true`; battery 70%, 35.3 °C, charging |
+
+Earlier in the same Phase 0 campaign, a pre-final candidate kept YouTube on
+Power Save after killing its daemon, recovered the mapped profile through the
+startup peek, rejected an older out-of-order peek, and rejected a second
+daemon through the OS lock. The final build retained those paths and repeated
+the crash/restart recovery above.
+
+Not exercised live: injecting an orphan `input_suspend=1` was denied by the
+device's SELinux policy; backups were restored and the node remained `0`.
+The write-ahead/orphan recovery path is covered by host unit tests and must be
+re-attempted on a device/policy that permits the injection.
+
+Final state: Service OFF, stock restore verified, MIUI camera thermal scenario
+preserved, Power history/peaks retained for the next run.

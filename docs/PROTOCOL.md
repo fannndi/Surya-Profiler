@@ -83,9 +83,19 @@ Units and sign:
 
 Sampler: **3 s screen-on / 30 s screen-off**. History is one-minute buckets,
 append-only in `<state_dir>/power-history.jsonl`, seven-day retention,
-all-time peaks in `power-peaks.json`. A clean daemon exit closes the
-in-progress bucket; a SIGKILL loses at most that minute. `power_clear` drops
-both files and resets the in-memory ring.
+all-time peaks in `power-peaks.json`. Each tick carries its wall-clock capture
+time and actual elapsed time; a screen-state change wakes the sampler and
+starts a fresh interval so a long screen-off gap is never attributed to the
+new foreground. Gaps longer than two bucket widths remain visible as missing
+coverage instead of fabricating usage. A clean daemon exit stops and joins the
+sampler before closing the in-progress bucket; a SIGKILL loses at most that
+minute. `power_clear` removes history, peaks and atomic-write temporaries; it
+reports an error unless every path is gone.
+
+Buckets may carry additive, backward-compatible `start_ms`, `end_ms`,
+`energy_mwh` and `segment_id` fields. Legacy rows omit them. Distinct partial
+segments with the same minute anchor are duration-weighted and merged on load;
+a replay of the same `segment_id` is deduplicated rather than counted twice.
 
 ```json
 {"event":"power","snapshot":{"window_s":86400,
@@ -99,23 +109,27 @@ both files and resets the in-memory ring.
   "current_bucket":{"t_ms":1700000000000,"pct":78,"avg_ua":-1240000,
     "min_ua":-1600000,"max_ua":-900000,"avg_uv":4120000,
     "avg_temp_c":32.4,"max_temp_c":33.1,"screen_on":true,
-    "dur_ms":60000,"samples":12,"pkg":"com.foo","profile":"game"},
+    "dur_ms":60000,"samples":12,"pkg":"com.foo","profile":"game",
+    "start_ms":1700000000000,"end_ms":1700000060000,
+    "energy_mwh":-49.6,"segment_id":"power-1234-1700000000000-0"},
   "history":[],
   "peaks":{"charge":{"ua":-2000000,"uv":4100000,"t_ms":1,"pct":60}}}}
 ```
 
-`power_live` carries the same `sample` plus the current (partial) `bucket`;
-the app merges buckets by `t_ms` so the chart moves between snapshots.
+`power_live` carries the same `sample` plus the current (partial) `bucket`.
+Live updates replace the same `segment_id`; legacy rows merge by minute.
 `window_s` is clamped to 600–604800. `history` is filtered to the requested
 window; `peaks` is all-time until Clear.
 
 Aggregation rules: package attribution uses the daemon's **last real
 foreground** package and only when the screen is on and unlocked; profile
 attribution uses the active profile (including `sleep`). A bucket is
-`screen_on` when most of its samples were; charge sessions, per-app and
-per-profile averages are derived client-side from the bucket list (time
-weighted). Peaks pair a bucket's extreme current with that bucket's average
-voltage; this is documented so a peak watt is not mistaken for a
+`screen_on` when most of its elapsed time was; charge sessions, per-app and
+per-profile averages are derived client-side from the bucket list (duration
+weighted). Unknown/unattributed time contributes to total duration and wins
+ties, so a short contextless startup partial cannot overwrite a long
+attributed partial. Peaks pair a bucket's extreme current with that bucket's
+average voltage; this is documented so a peak watt is not mistaken for a
 sample-exact value.
 
 ## Diagnostics payload

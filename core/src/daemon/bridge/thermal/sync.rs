@@ -2,7 +2,10 @@
 
 use super::release::set_sconfig_verified;
 use super::*;
-use std::time::{Duration, Instant};
+use std::time::Instant;
+
+#[cfg(test)]
+mod tests;
 
 /// MIUI can write a yield scenario between our select write and the next
 /// sync. Re-read immediately so the camera/phone override is not lost.
@@ -22,6 +25,11 @@ impl Bridge {
         let Some(desired) = desired else {
             return self.release_thermal_locked(st);
         };
+        if st.holds_recovery_blocked {
+            // Recovery already logged why. Release remains available, but a
+            // missing restore point must not be replaced by a guessed capture.
+            return false;
+        }
 
         let mut changed = false;
 
@@ -29,14 +37,17 @@ impl Bridge {
         // an upgrade from the 20–23 era is picked up even when holds.json
         // says thermal_held=true.
         if st.thermal_refresh_pending {
-            st.thermal_refresh_pending = false;
             if st.holds.thermal_held || marker_path().exists() {
+                if !self.persist_thermal_before_write(st) {
+                    return changed;
+                }
                 match install_all() {
                     Ok(src) => self.log_event(format!("thermal: map refreshed ({src})")),
                     Err(e) => self.log_event(format!("thermal: map refresh failed: {e}")),
                 }
-                changed = true;
             }
+            st.thermal_refresh_pending = false;
+            changed = true;
         }
 
         let live = read_i32(&sconfig_path());
@@ -46,6 +57,11 @@ impl Bridge {
         // scenario before the normal yield check.
         let perf = miui_performance_mode();
         if perf {
+            if (st.holds.thermal_held || marker_path().exists())
+                && !self.persist_thermal_before_write(st)
+            {
+                return changed;
+            }
             let forced = match force_perf_stock(live) {
                 Ok(v) => v,
                 Err(e) => {
@@ -78,15 +94,26 @@ impl Bridge {
             }
             return changed;
         }
-        if let Some(deadline) = st.thermal_retry_at {
-            if Instant::now() < deadline {
-                return changed;
-            }
-            st.thermal_retry_at = None;
+        if st.thermal_retry.blocks(desired.id(), Instant::now()) {
+            return changed;
         }
 
         if !st.holds.thermal_held {
             let marker_before = marker_path().exists();
+            // A leftover custom/legacy index is not a user value; the safe
+            // restore point is stock normal. Every decoded MIUI scenario is
+            // preserved, including offsets with no literal vendor-map entry.
+            let saved = initial_saved_sconfig(live, marker_before);
+            let previous = st.holds.clone();
+            st.holds.thermal_held = true;
+            st.holds.thermal_saved_sconfig = Some(saved);
+            st.holds.thermal_yield = None;
+            if !self.persist_thermal_before_write(st) {
+                st.holds = previous;
+                return changed;
+            }
+            changed = true;
+
             match install_all() {
                 Ok(src) => {
                     if src == "fallback" {
@@ -94,23 +121,11 @@ impl Bridge {
                     }
                 }
                 Err(e) => {
-                    self.thermal_failed(st, format!("install failed: {e}"));
+                    self.thermal_failed(st, desired.id(), format!("install failed: {e}"));
                     let _ = remove_owned();
                     return changed;
                 }
             }
-            st.holds.thermal_held = true;
-            // A leftover custom/legacy index is not a user value; the safe
-            // restore point is stock normal. MIUI scenario values are kept
-            // only when they have a vendor map entry.
-            let saved = match live {
-                Some(v) if is_custom_index(v) || (marker_before && is_legacy_index(v)) => 0,
-                Some(v) if thermal_scenario::has_vendor_map_entry(v) => v,
-                _ => 0,
-            };
-            st.holds.thermal_saved_sconfig = Some(saved);
-            st.holds.thermal_yield = None;
-            changed = true;
 
             match select_profile(desired) {
                 SelectOutcome::Ok => {
@@ -139,7 +154,7 @@ impl Bridge {
                 }
                 SelectOutcome::Failed(e) => {
                     self.repair_after_select_failure(&e);
-                    self.thermal_failed(st, format!("select failed: {e}"));
+                    self.thermal_failed(st, desired.id(), format!("select failed: {e}"));
                     let saved = st.holds.thermal_saved_sconfig.unwrap_or(0);
                     // Never remove the map while sconfig may still point at
                     // one of our indices; mi_thermald keeps the last config
@@ -165,6 +180,9 @@ impl Bridge {
         // Already installed: repair missing files, then keep the selected
         // profile in sync.
         if !marker_path().exists() {
+            if !self.persist_thermal_before_write(st) {
+                return changed;
+            }
             match install_all() {
                 Ok(src) => {
                     self.log_event(format!("thermal: reinstalled ({src})"));
@@ -184,6 +202,9 @@ impl Bridge {
         let target = desired.sconfig();
         let profile_changed = st.holds.thermal_profile.as_deref() != Some(desired.id());
         if live != Some(target) || profile_changed {
+            if !self.persist_thermal_before_write(st) {
+                return changed;
+            }
             if let Some(v) = live {
                 if !is_custom_index(v) && !thermal_scenario::is_default(v) {
                     self.log_event(format!(
@@ -194,6 +215,7 @@ impl Bridge {
             }
             match select_profile(desired) {
                 SelectOutcome::Ok => {
+                    self.thermal_recovered(st);
                     self.log_event(format!(
                         "thermal: {} active (sconfig {})",
                         desired.id(),
@@ -210,6 +232,7 @@ impl Bridge {
                     }
                 }
                 SelectOutcome::Preempted(v) => {
+                    self.thermal_recovered(st);
                     self.log_event(format!(
                         "thermal: MIUI took sconfig {v} ({}); yielding",
                         thermal_scenario::label(v)
@@ -218,11 +241,23 @@ impl Bridge {
                 }
                 SelectOutcome::Failed(e) => {
                     self.repair_after_select_failure(&e);
-                    self.thermal_failed(st, format!("select failed: {e}"));
+                    self.thermal_failed(st, desired.id(), format!("select failed: {e}"));
                 }
             }
         }
         changed
+    }
+
+    /// Persist the restore point before any thermal device write. A held
+    /// takeover without a captured `sconfig` is not safe to reassert.
+    fn persist_thermal_before_write(&self, st: &State) -> bool {
+        if st.holds.thermal_held && st.holds.thermal_saved_sconfig.is_none() {
+            self.log_event(
+                "thermal hold persistence refused: sconfig restore point is missing".into(),
+            );
+            return false;
+        }
+        self.persist(st).is_ok()
     }
 
     /// A failed select is often a corrupted owned config (truncated/garbled
@@ -243,16 +278,12 @@ impl Bridge {
         }
     }
 
-    fn thermal_failed(&self, st: &mut State, msg: String) {
-        st.thermal_failures = st.thermal_failures.saturating_add(1).min(6);
-        let shift = (st.thermal_failures - 1).min(4) as u32;
-        let secs = 15u64.saturating_mul(1u64 << shift).min(300);
-        st.thermal_retry_at = Some(Instant::now() + Duration::from_secs(secs));
-        self.log_event(format!("thermal: {msg}; retry in {secs}s"));
+    fn thermal_failed(&self, st: &mut State, desired: &str, msg: String) {
+        let retry_in = st.thermal_retry.failed(desired, Instant::now());
+        self.log_event(format!("thermal: {msg}; retry in {}s", retry_in.as_secs()));
     }
 
     fn thermal_recovered(&self, st: &mut State) {
-        st.thermal_failures = 0;
-        st.thermal_retry_at = None;
+        st.thermal_retry.recovered();
     }
 }

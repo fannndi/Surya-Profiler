@@ -91,6 +91,26 @@ fn freq_max_below_miui14_floor_is_locked() {
 }
 
 #[test]
+fn exact_reconcile_never_raises_a_stricter_live_freq_max() {
+    let p = profile(&[("policy0.scaling_max_freq", "1804800")]);
+    let mut probe = fake_probe();
+    probe.entries.insert(
+        "policy0.scaling_max_freq".into(),
+        entry_state(true, "1209600"),
+    );
+    let plan = build_plan_opt(&p, &probe, true);
+    assert_eq!(plan.ops[0].status, OpStatus::Unchanged);
+
+    // A lost cap (live above wanted) is still repaired by forced reconcile.
+    probe.entries.insert(
+        "policy0.scaling_max_freq".into(),
+        entry_state(true, "2169600"),
+    );
+    let plan = build_plan_opt(&p, &probe, true);
+    assert_eq!(plan.ops[0].status, OpStatus::Ok);
+}
+
+#[test]
 fn governor_not_available_is_locked() {
     let p = profile(&[("policy0.scaling_governor", "performance")]);
     let plan = build_plan(&p, &fake_probe());

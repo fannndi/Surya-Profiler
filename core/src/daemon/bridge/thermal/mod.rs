@@ -45,10 +45,71 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub(crate) const MARKER_NAME: &str = ".suryaprofiler";
 pub(crate) const MARKER_BODY: &str = "surya-profiler thermal takeover v2\n";
+
+/// Backoff belongs to the profile that failed, not merely to the bridge. A
+/// newly requested profile must be allowed to select immediately.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ThermalRetry {
+    deadline: Option<Instant>,
+    profile: Option<String>,
+    failures: u8,
+}
+
+impl ThermalRetry {
+    /// True while the same requested profile must wait. A different profile
+    /// clears the old deadline and bypasses it immediately.
+    pub(super) fn blocks(&mut self, desired: &str, now: Instant) -> bool {
+        let Some(deadline) = self.deadline else {
+            return false;
+        };
+        if now >= deadline {
+            self.deadline = None;
+            if self.profile.as_deref() != Some(desired) {
+                self.recovered();
+            }
+            return false;
+        }
+        if self.profile.as_deref() == Some(desired) {
+            return true;
+        }
+        self.recovered();
+        false
+    }
+
+    /// Records a failure and returns the delay applied to this profile.
+    pub(super) fn failed(&mut self, desired: &str, now: Instant) -> Duration {
+        if self.profile.as_deref() != Some(desired) {
+            self.failures = 0;
+        }
+        self.profile = Some(desired.to_string());
+        self.failures = self.failures.saturating_add(1).min(6);
+        let shift = (self.failures - 1).min(4) as u32;
+        let secs = 15u64.saturating_mul(1u64 << shift).min(300);
+        self.deadline = Some(now + Duration::from_secs(secs));
+        Duration::from_secs(secs)
+    }
+
+    pub(super) fn recovered(&mut self) {
+        self.deadline = None;
+        self.profile = None;
+        self.failures = 0;
+    }
+}
+
+/// Restore point for the first takeover. Leftover private indices are ours,
+/// while every decoded MIUI scenario (including offsets) belongs to MIUI even
+/// when the raw ID is absent from the vendor map.
+pub(super) fn initial_saved_sconfig(live: Option<i32>, marker_before: bool) -> i32 {
+    match live {
+        Some(v) if is_custom_index(v) || (marker_before && is_legacy_index(v)) => 0,
+        Some(v) if thermal_scenario::is_miui_owned(v) => v,
+        _ => 0,
+    }
+}
 
 mod files;
 mod install;
@@ -94,20 +155,26 @@ pub fn files_fix() -> Value {
 }
 
 pub fn cleanup_orphan() -> Result<(), String> {
-    if !marker_path().exists() && !map_contains_owned() {
+    let live = read_i32(&sconfig_path()).unwrap_or(0);
+    if !marker_path().exists() && !map_contains_owned() && !is_custom_index(live) {
         return Ok(());
     }
-    let live = read_i32(&sconfig_path()).unwrap_or(0);
     let owned_live = is_custom_index(live) || is_legacy_index(live);
-    let default_live = live == 0 || thermal_scenario::is_default(live);
-    if owned_live || default_live || !thermal_scenario::has_vendor_map_entry(live) {
-        write_text(&sconfig_path(), "0\n")?;
+    if let Some(target) = orphan_cleanup_sconfig_target(live, owned_live) {
+        write_text(&sconfig_path(), &format!("{target}\n"))?;
     }
     if remove_owned() {
         Ok(())
     } else {
         Err("thermal cleanup incomplete (map or marker removal failed)".into())
     }
+}
+
+/// Stock value to write during orphan cleanup, or `None` for a live MIUI
+/// scenario. Legacy indices are always treated as ours during CLI cleanup.
+pub(crate) fn orphan_cleanup_sconfig_target(live: i32, owned_live: bool) -> Option<i32> {
+    (owned_live || thermal_scenario::is_default(live) || !thermal_scenario::is_miui_owned(live))
+        .then_some(0)
 }
 
 /// Read-only inspection for `doctor` and diagnostics. Never mutates.

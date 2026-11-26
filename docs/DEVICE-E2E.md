@@ -53,6 +53,27 @@ MIUI 14, root APatch.
 > Power usage was verified on surya on 2026-11-26 (0.11.0); see
 > `docs/HISTORY.md` for the measurements. Re-run after engine changes.
 
+- [ ] Daemon restart while a mapped game/video remains foreground: startup
+      peek keeps the mapped profile, thermal index and render/affinity holds.
+- [ ] Two rapid wake/unlock peeks completing out of order: newest result wins.
+- [ ] Lock screen while a Game-mapped app is active: returns to universal base;
+      unlock to the same app restores Game.
+- [ ] With `mi_thermald` holding a lower CPU cap, re-tap the active profile:
+      the stricter cap is preserved.
+- [ ] Camera/phone/4K/8K offset scenarios (`112`/`108`/`117`/`118`): Service OFF
+      and `thermal-clean` preserve the MIUI-owned scenario.
+- [ ] Missing `holds.json` + live `input_suspend=1` + R&D switch enabled:
+      startup releases the orphan to `0` before any new hold.
+- [ ] Two simultaneous daemon startups: exactly one acquires `daemon.lock`.
+- [ ] Power history with same-minute partials: reload preserves total duration,
+      energy and attribution; a repeated `segment_id` is not double-counted.
+- [ ] Legacy duplicate-minute history is merged and atomically rewritten on
+      load; a zero-duration first reading updates peaks without adding a row.
+- [ ] Long screen-off suspend: no fabricated bucket; coverage gap is visible.
+- [ ] Kill/restart daemon while Power screen is open: snapshot/live resubscribe
+      on the new connection.
+- [ ] Power Clear with an undeletable temporary/file: UI receives an error and
+      existing history is not reported as cleared.
 - [ ] Power usage: Home → Power shows live `current_now`/voltage matching
       `su -c 'cat /sys/class/power_supply/battery/{current_now,voltage_now,status}'`
       (negative current = charging, positive = discharging).

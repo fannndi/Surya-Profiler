@@ -5,6 +5,7 @@ use super::*;
 impl Runtime {
     /// Foreground package event (the daemon's own watcher).
     pub(crate) fn on_fg(&mut self, pkg: String) {
+        self.foreground_ready = true;
         if !arbiter::is_transient(Some(&pkg)) {
             self.last_real = Some(pkg.clone());
         }
@@ -31,7 +32,19 @@ impl Runtime {
     /// Wake/unlock seed from the daemon's own peek (None = nothing found).
     /// `triggers`: "unlock" always evaluates (wake re-asserts the decision);
     /// "peek" (stream-down fallback) only evaluates when the package changed.
-    pub(crate) fn on_seed(&mut self, peeked: Option<String>, trigger: &str, started: Instant) {
+    pub(crate) fn on_seed(
+        &mut self,
+        peeked: Option<String>,
+        trigger: &str,
+        started: Instant,
+        seq: u64,
+    ) {
+        if seq <= self.last_seed_seq {
+            self.log("seed: stale peek ignored (older request completed)");
+            return;
+        }
+        self.last_seed_seq = seq;
+        self.foreground_ready = true;
         if self.last_fg_at.is_some_and(|live| started < live) {
             self.log("seed: stale peek ignored (a live event arrived)");
             return;
@@ -48,7 +61,7 @@ impl Runtime {
             self.last_fg = Some(b);
         }
         self.emit_state(false);
-        if trigger == "unlock" || changed {
+        if trigger == "startup" || trigger == "unlock" || changed {
             self.evaluate(trigger, None);
         }
     }
@@ -110,8 +123,11 @@ impl Runtime {
 
     /// One-shot foreground peek on a short thread (never blocks the loop).
     pub(crate) fn peek_now(&mut self, trigger: &'static str) {
+        self.peek_seq = self.peek_seq.saturating_add(1);
+        let seq = self.peek_seq;
+        self.last_fg_probe = Instant::now();
         let tx = self.tx.clone();
-        let _ = std::thread::Builder::new()
+        if let Err(e) = std::thread::Builder::new()
             .name("peek".into())
             .spawn(move || {
                 let started = Instant::now();
@@ -120,7 +136,11 @@ impl Runtime {
                     pkg,
                     trigger,
                     started,
+                    seq,
                 });
-            });
+            })
+        {
+            self.log(&format!("foreground peek spawn failed: {e}"));
+        }
     }
 }

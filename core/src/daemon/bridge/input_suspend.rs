@@ -13,6 +13,9 @@ use crate::engine::apply::guarded_write;
 use crate::engine::env::default_root;
 use std::fs;
 
+#[cfg(test)]
+mod tests;
+
 /// Catalog path for the single audited charge node. Writes always use this
 /// literal (the catalog guard checks membership); reads resolve it through
 /// the simulation root in [`node`].
@@ -46,15 +49,27 @@ pub(super) fn write_verified(value: &str) -> Result<(), String> {
     ))
 }
 
+/// Stock value to release for an orphan, or `None` when the node is already
+/// safe or a persisted hold owns it.
+pub(super) fn orphan_release_value(held: bool, live: Option<&str>) -> Option<&'static str> {
+    (!held && live == Some("1")).then_some("0")
+}
+
 impl Bridge {
     /// Crash recovery: `input_suspend` is an app-only R&D node and its stock
     /// value is 0. If a previous run wrote 1 but the hold was lost, release it
     /// at startup so the phone does not stay on battery while plugged in.
+    ///
+    /// The main loop must call this unconditionally at startup: the R&D switch
+    /// being enabled does not make an unowned live 1 safe. A persisted hold is
+    /// left untouched for the normal release path.
     pub(crate) fn reconcile_orphan_input_suspend(&self) {
-        if read_live().as_deref() != Some("1") {
+        let st = self.lock();
+        let live = read_live();
+        let Some(value) = orphan_release_value(st.holds.input_suspend_held, live.as_deref()) else {
             return;
-        }
-        match write_verified("0") {
+        };
+        match write_verified(value) {
             Ok(()) => self.log_event("R&D input suspend orphan released".into()),
             Err(e) => self.log_event(format!("R&D input suspend orphan release failed: {e}")),
         }
@@ -62,14 +77,26 @@ impl Bridge {
 
     /// One input-suspend sync; caller holds the bridge lock (like the saver sync).
     pub(super) fn sync_input_suspend(&self, st: &mut State, ctx: &SyncCtx) -> bool {
-        let live = read_live();
+        self.sync_input_suspend_with_live(st, ctx, read_live())
+    }
+
+    fn sync_input_suspend_with_live(
+        &self,
+        st: &mut State,
+        ctx: &SyncCtx,
+        live: Option<String>,
+    ) -> bool {
         let (next, action) = st.holds.request_input_suspend(live, ctx.rnd_input_suspend);
         match action {
             InputSuspendAction::Engage => {
                 // Write-ahead the captured restore point before touching the
                 // charger node; a crash cannot leave input_suspend=1 unowned.
+                let previous = st.holds.clone();
                 st.holds = next;
-                self.persist(st);
+                if self.persist(st).is_err() {
+                    st.holds = previous;
+                    return false;
+                }
                 match write_verified("1") {
                     Ok(()) => {
                         self.log_event("R&D input suspend ON".into());

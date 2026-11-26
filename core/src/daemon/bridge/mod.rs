@@ -95,8 +95,10 @@ pub(crate) struct State {
     thermal_refresh_pending: bool,
     /// Backoff after a failed `mi_thermald` select/install (avoid a 4 s
     /// blocking retry + log spam on every sync while the daemon is broken).
-    thermal_retry_at: Option<std::time::Instant>,
-    thermal_failures: u8,
+    thermal_retry: thermal::ThermalRetry,
+    /// Missing/corrupt restore state was found while a thermal takeover is
+    /// live. Release remains available, but new thermal writes fail closed.
+    holds_recovery_blocked: bool,
 }
 
 impl Bridge {

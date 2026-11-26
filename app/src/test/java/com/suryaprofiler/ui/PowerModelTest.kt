@@ -3,6 +3,7 @@ package com.suryaprofiler.ui
 import com.suryaprofiler.protocol.PowerBucket
 import com.suryaprofiler.protocol.PowerSample
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -22,6 +23,11 @@ class PowerModelTest {
         maxUa: Long = avgUa,
         avgTemp: Float? = null,
         maxTemp: Float? = null,
+        samples: Int = 1,
+        startMs: Long? = null,
+        endMs: Long? = null,
+        energyMwh: Double? = null,
+        segmentId: String? = null,
     ) = PowerBucket(
         tMs = t,
         pct = pct,
@@ -33,9 +39,13 @@ class PowerModelTest {
         maxTempC = maxTemp,
         screenOn = screenOn,
         durMs = dur,
-        samples = 1,
+        samples = samples,
         pkg = pkg,
         profile = profile,
+        startMs = startMs,
+        endMs = endMs,
+        energyMwh = energyMwh,
+        segmentId = segmentId,
     )
 
     private fun sample(
@@ -114,18 +124,87 @@ class PowerModelTest {
         assertNull(estimateToFull(sample(1_000_000)))
     }
 
-    @Test fun mergesLiveOverHistoryAndClipsWindow() {
+    @Test fun mergesLegacySameMinuteByDurationAndClipsWindow() {
         val t0 = 1_700_000_000_000
         val hist = bucket(t0, 100_000)
         val live = bucket(t0, -100_000).copy(tMs = t0)
         val merged = mergeBuckets(listOf(hist), listOf(live, bucket(t0 + 60_000, 200_000)))
         assertEquals(2, merged.size)
-        assertEquals(-100_000, merged[0].avgUa)
+        assertEquals(0L, merged[0].avgUa)
         val points = powerPoints(merged, emptyList(), 3600, t0 + 120_000)
         assertEquals(2, points.size)
-        assertEquals(-400.0, points[0].mw, 0.01)
+        assertEquals(0.0, points[0].mw, 0.01)
         val clipped = powerPoints(merged, emptyList(), 1, t0 + 120_000)
         assertTrue(clipped.isEmpty())
+    }
+
+    @Test fun mergeKeepsFiftyFourSecondAttributionAndThreeUnknownSeconds() {
+        val t0 = 1_700_000_000_000
+        val attributed = bucket(
+            t0, -1_000_000, dur = 54_000, screenOn = true, pkg = "app", profile = "game",
+            minUa = -2_000_000, maxUa = -500_000, avgTemp = 30f, maxTemp = 31f, samples = 18,
+        )
+        val unknown = bucket(
+            t0, 3_000_000, avgUv = 4_200_000, dur = 3_000, screenOn = false,
+            minUa = 2_900_000, maxUa = 3_100_000, avgTemp = 40f, maxTemp = 40f,
+        )
+        val merged = mergeBuckets(listOf(attributed, unknown), emptyList()).single()
+        assertEquals(57_000L, merged.durMs)
+        assertEquals(19, merged.samples)
+        assertEquals(-789_474L, merged.avgUa)
+        assertEquals(4_010_526L, merged.avgUv)
+        assertEquals(30.526316f, merged.avgTempC!!, 0.000_01f)
+        assertEquals(-2_000_000L, merged.minUa)
+        assertEquals(3_100_000L, merged.maxUa)
+        assertTrue(merged.screenOn)
+        assertEquals("app", merged.pkg)
+        assertEquals("game", merged.profile)
+    }
+
+    @Test fun mergeWeightsTwelveAndFortyEightSecondPowerSegments() {
+        val t0 = 1_700_000_000_000
+        val charging = bucket(t0, -1_000_000, dur = 12_000, pkg = "a", profile = "game", avgTemp = 20f)
+        val usage = bucket(
+            t0, 3_000_000, avgUv = 4_200_000, dur = 48_000, screenOn = false,
+            pkg = "b", profile = "sleep", avgTemp = 40f,
+        )
+        val merged = mergeBuckets(listOf(charging, usage), emptyList()).single()
+        assertEquals(60_000L, merged.durMs)
+        assertEquals(2_200_000L, merged.avgUa)
+        assertEquals(4_160_000L, merged.avgUv)
+        assertEquals(36f, merged.avgTempC!!, 0.000_01f)
+        assertFalse(merged.screenOn)
+        assertNull(merged.pkg)
+        assertEquals("sleep", merged.profile)
+    }
+
+    @Test fun unknownAttributionWinsWhenItHasMoreDuration() {
+        val t0 = 1_700_000_000_000
+        val attributed = bucket(t0, 100_000, dur = 3_000, pkg = "app", profile = "game")
+        val unknown = bucket(t0, 300_000, dur = 54_000)
+        val merged = mergeBuckets(listOf(attributed, unknown), emptyList()).single()
+        assertEquals(57_000L, merged.durMs)
+        assertTrue(merged.screenOn)
+        assertNull(merged.pkg)
+        assertNull(merged.profile)
+    }
+
+    @Test fun distinctSameMinuteSegmentsStaySeparateButCumulativeUpdatesReplace() {
+        val t0 = 1_700_000_000_000
+        val first = bucket(t0, 100_000, dur = 12_000, segmentId = "segment-1")
+        val second = bucket(t0, 300_000, dur = 48_000, segmentId = "segment-2")
+        assertEquals(2, mergeBuckets(listOf(first), listOf(second)).size)
+        val cumulative = second.copy(durMs = 60_000)
+        val merged = mergeBuckets(listOf(first.copy(segmentId = "segment-2")), listOf(cumulative)).single()
+        assertEquals(60_000L, merged.durMs)
+        assertEquals(300_000L, merged.avgUa)
+    }
+
+    @Test fun aggregatePowerLabelsExposeChargeAndUsageSign() {
+        assertEquals("Charge 5.12 W", formatPowerWithDirection(-5_120.0))
+        assertEquals("Usage 412 mW", formatPowerWithDirection(412.0))
+        assertEquals("Idle 0 mW", formatPowerWithDirection(0.0))
+        assertEquals("—", formatPowerWithDirection(null))
     }
 
     @Test fun chartRangeIncludesZero() {
@@ -183,6 +262,18 @@ class PowerModelTest {
         val done = latestChargeSession(after)!!
         assertEquals(false, done.ongoing)
         assertNotNull(done.endMs)
+    }
+
+    @Test fun chargeSessionUsesExplicitEndTimeWhenPresent() {
+        val t0 = 1_700_000_000_000
+        val rows = listOf(
+            bucket(t0, -1_000_000, dur = 12_000, startMs = t0 - 5_000, endMs = t0 + 7_000),
+            bucket(t0 + 60_000, -2_000_000, dur = 48_000, startMs = t0 + 55_000, endMs = t0 + 103_000),
+        )
+        val session = latestChargeSession(rows)!!
+        assertEquals(t0, session.startMs)
+        assertEquals(t0 + 103_000, session.endMs)
+        assertEquals(60_000L, session.durMs)
     }
 
     @Test fun batteryHealthUsesDeviceDesignCapacity() {

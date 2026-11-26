@@ -105,7 +105,7 @@ internal fun PowerProfileCard(stats: List<ProfilePowerStat>) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    formatPower(s.avgMw) + " · " + formatCurrent(s.avgUa.roundToLong()),
+                    formatPowerWithDirection(s.avgMw) + " · " + formatCurrent(s.avgUa.roundToLong()),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

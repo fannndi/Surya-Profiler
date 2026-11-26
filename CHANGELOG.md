@@ -4,7 +4,27 @@
 > (`EVIDENCE-DEVICE`, `EVIDENCE-THERMAL`, `HISTORY`, `OPEN-QUESTIONS`);
 > older entries below still name the original paths.
 
-## 0.11.0 — 2026-11-26 (Power usage: read-only charging + history)
+## 0.11.0 — 2026-11-26 (Power usage + Phase 0 safety/telemetry integrity)
+
+- Startup foreground peek keeps mapped apps active across daemon restarts;
+  peek sequencing prevents older wake/unlock results from winning.
+- Periodic foreground fallback repairs a hung or cleared logcat stream.
+- Lock screen returns to the universal base instead of retaining a Game
+  mapping; bridge saver attribution is updated before slow thermal work.
+- Forced reconciliation preserves stricter external thermal caps.
+- Decoded MIUI offset scenarios (`112`, `108`, `117`, `118`, …) survive thermal
+  release/cleanup and are no longer replaced with stock normal.
+- Unowned `input_suspend=1` is released before a new R&D hold can capture it;
+  hold persistence is fail-closed and atomically fsynced.
+- PID-file create/unlink race replaced by an OS-backed `flock` on
+  `daemon.lock`; concurrent startups have exactly one winner.
+- Power sampling uses actual elapsed time, wakes on screen changes, joins
+  before final flush, merges same-minute partials without data loss, dedupes
+  segment replays, reconciles peaks, and makes Clear fail-closed. Legacy
+  duplicate-minute files are healed on load; a zero-duration first reading
+  contributes extrema/peaks without fabricating represented time.
+- Power protocol adds backward-compatible segment bounds/energy/ID; the app
+  resubscribes after daemon reconnect and rejects malformed snapshots.
 
 - **Power usage screen (read-only).** Home → Power shows live battery-side
   current, watt, voltage, temperature, charger input (when the kernel exposes
@@ -34,16 +54,23 @@
 - **Internal split.** `daemon/proto.rs`'s stdout `Publisher` moved to
   `daemon/publisher.rs` and the PID guard to `daemon/instance.rs` to keep the
   file budget (no behaviour change).
-- Host: new Rust unit tests (probe/bucket/store/retention/peaks) + a real
-  daemon E2E (fake tree, live stream, history, peaks, screen-off context,
-  clear) + Kotlin parser/model tests.
+- Host: **264 Rust unit tests**, **21 daemon E2E** and **54 Kotlin JVM
+  tests** pass; fmt, clippy, architecture guardrails and APK build are clean.
+  Coverage includes startup/peek sequencing, thermal offset ownership,
+  write-ahead hold persistence, the single-writer lock, elapsed-time power
+  aggregation, legacy history healing, segment replay deduplication,
+  reconnect/resubscribe and fail-closed Clear.
 - Device E2E (surya, 2026-11-26): live 797 mA / 3.51 W at 85% matched sysfs
   (`current_now=-798645 µA`, `voltage_now=4403272 µV`); `usb (USB_CDP)`
   reported via `uevent`; `input_suspend=1` showed the bypass warning and
   restored to 0; screen-off Sleep bucket (2 samples/60 s), per-app/profile
   rows, peaks, Clear (files deleted, live continues), history survived
   Service OFF/ON, and the full 19/19 stock restore kept the Power CTA while
-  off. Evidence: `docs/HISTORY.md`.
+  off. Phase 0 final build (`b14e4fe1…` / APK `6db01e77…`) additionally
+  verified legacy history healing (70 rows → 67 minutes), Power reconnect
+  after SIGKILL, crash-hold recovery, camera yield and preservation of MIUI
+  `sconfig=12` through Service OFF, all holds released and `doctor ok:true`.
+  Evidence: `docs/HISTORY.md`.
 
 ## 0.10.0 — 2026-11-24 (per-app render scale + optional display scale)
 

@@ -58,6 +58,7 @@ impl Runtime {
                 self.screen_on = on;
                 self.locked = locked;
                 self.power_screen.store(on, Ordering::Relaxed);
+                self.power_sampler.wake();
                 if !on {
                     self.fg_debounce = None;
                     if was_on {
@@ -165,7 +166,7 @@ impl Runtime {
                     watchers: Watchers {
                         fg: self
                             .fg_watcher
-                            .as_ref()
+                            .as_mut()
                             .map(|w| w.is_alive())
                             .unwrap_or(false),
                     },
@@ -205,14 +206,21 @@ impl Runtime {
                     });
                 }
             }
-            Command::PowerClear => {
-                self.power.clear();
-                self.log("power: history cleared");
-                let snapshot = self.power.snapshot(crate::daemon::power::DEFAULT_WINDOW_S);
-                self.publisher.emit_reliable(&Event::Power {
-                    snapshot: Box::new(snapshot),
-                });
-            }
+            Command::PowerClear => match self.power.clear() {
+                Ok(()) => {
+                    self.log("power: history cleared");
+                    let snapshot = self.power.snapshot(crate::daemon::power::DEFAULT_WINDOW_S);
+                    self.publisher.emit_reliable(&Event::Power {
+                        snapshot: Box::new(snapshot),
+                    });
+                }
+                Err(e) => {
+                    self.log(&format!("power: history clear failed: {e}"));
+                    self.publisher.emit_reliable(&Event::Error {
+                        msg: format!("power history clear failed: {e}"),
+                    });
+                }
+            },
         }
         true
     }

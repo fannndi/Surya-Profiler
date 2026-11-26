@@ -23,49 +23,54 @@ impl Bridge {
     /// before the release (and is then undone by it) or observes the gate and
     /// returns without touching the device.
     pub(crate) fn sync(&self, ctx: &SyncCtx) {
-        let (
-            saver_changed,
-            input_suspend_changed,
-            thermal_changed,
-            affinity_changed,
-            downscale_changed,
-            display_changed,
-        ) = {
+        // Phase 1: short, latency-sensitive holds. Update saver attribution
+        // before thermal/downscale subprocess work so a foreground change
+        // during a slow select cannot keep the old saver decision alive.
+        let (saver_changed, input_suspend_changed) = {
             let mut st = self.lock();
             if self.blocked.load(Ordering::Acquire) || !ctx.enabled {
                 return;
             }
-            let saver_changed = self.sync_saver(&mut st, ctx);
-            let input_suspend_changed = self.sync_input_suspend(&mut st, ctx);
-            let thermal_changed = self.sync_thermal(&mut st, ctx);
-            let affinity_changed = affinity::sync(&mut st.affinity, ctx);
-            let downscale_changed = downscale::sync_ctx(&mut st.downscale, ctx);
-            let display_changed = display::sync_ctx(&mut st.display, ctx);
             (
-                saver_changed,
-                input_suspend_changed,
-                thermal_changed,
-                affinity_changed,
-                downscale_changed,
-                display_changed,
+                self.sync_saver(&mut st, ctx),
+                self.sync_input_suspend(&mut st, ctx),
             )
         };
-        if saver_changed || input_suspend_changed || thermal_changed {
+        if saver_changed || input_suspend_changed {
             self.refresh_attribution();
             let st = self.lock();
-            self.persist(&st);
+            let _ = self.persist(&st);
+        }
+
+        // Phase 2: slower tuning holds. A second gate check prevents a restore
+        // that began between phases from re-engaging anything.
+        let (thermal_changed, affinity_changed, downscale_changed, display_changed) = {
+            let mut st = self.lock();
+            if self.blocked.load(Ordering::Acquire) || !ctx.enabled {
+                return;
+            }
+            (
+                self.sync_thermal(&mut st, ctx),
+                affinity::sync(&mut st.affinity, ctx),
+                downscale::sync_ctx(&mut st.downscale, ctx),
+                display::sync_ctx(&mut st.display, ctx),
+            )
+        };
+        if thermal_changed {
+            let st = self.lock();
+            let _ = self.persist(&st);
         }
         if affinity_changed {
             let st = self.lock();
-            self.persist_affinity(&st);
+            let _ = self.persist_affinity(&st);
         }
         if downscale_changed {
             let st = self.lock();
-            self.persist_downscale(&st);
+            let _ = self.persist_downscale(&st);
         }
         if display_changed {
             let st = self.lock();
-            self.persist_display(&st);
+            let _ = self.persist_display(&st);
         }
     }
 
@@ -155,19 +160,19 @@ impl Bridge {
         if changed {
             self.refresh_attribution();
             let st = self.lock();
-            self.persist(&st);
+            let _ = self.persist(&st);
         }
         if affinity_changed {
             let st = self.lock();
-            self.persist_affinity(&st);
+            let _ = self.persist_affinity(&st);
         }
         if downscale_changed {
             let st = self.lock();
-            self.persist_downscale(&st);
+            let _ = self.persist_downscale(&st);
         }
         if display_changed {
             let st = self.lock();
-            self.persist_display(&st);
+            let _ = self.persist_display(&st);
         }
         if report.ok() {
             self.log_event("all holds released".into());
@@ -192,7 +197,7 @@ impl Bridge {
         }
         let changed = affinity::reconcile(&mut st.affinity);
         if changed {
-            self.persist_affinity(&st);
+            let _ = self.persist_affinity(&st);
         }
     }
 }

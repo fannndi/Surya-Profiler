@@ -1,6 +1,7 @@
 //! Bridge recovery + holds persistence.
 
 use super::*;
+use std::io::Write;
 
 impl Bridge {
     /// Loads persisted holds from a previous run (crash recovery).
@@ -13,20 +14,10 @@ impl Bridge {
         let affinity_path = state_dir.join("affinity.json");
         let downscale_path = state_dir.join("downscale.json");
         let display_path = state_dir.join("display.json");
-        let holds = fs::read_to_string(&holds_path)
-            .ok()
-            .and_then(|s| serde_json::from_str::<HoldsFile>(&s).ok())
-            .map(|f| Holds {
-                saver_held: f.saver_held,
-                saver_saved: f.saver_saved,
-                input_suspend_held: f.input_suspend_held,
-                input_suspend_saved: f.input_suspend_saved,
-                thermal_held: f.thermal_held,
-                thermal_saved_sconfig: f.thermal_saved_sconfig,
-                thermal_profile: f.thermal_profile,
-                thermal_yield: f.thermal_yield,
-            })
-            .unwrap_or_default();
+        let holds_missing = !holds_path.exists();
+        let loaded_holds = read_holds_file(&holds_path);
+        let holds_load_error = loaded_holds.as_ref().err().cloned();
+        let holds = loaded_holds.unwrap_or_default();
         let affinity = fs::read_to_string(&affinity_path)
             .ok()
             .and_then(|s| serde_json::from_str::<affinity::AffinityState>(&s).ok())
@@ -39,6 +30,24 @@ impl Bridge {
             .ok()
             .and_then(|s| serde_json::from_str::<display::DisplayState>(&s).ok())
             .unwrap_or_default();
+        let live_thermal_takeover = thermal::marker_exists()
+            || thermal::map_contains_owned()
+            || thermal::read_i32(&thermal::sconfig_path()).is_some_and(thermal::is_custom_index);
+        let holds_recovery_blocked = holds_recovery_blocked(
+            holds_missing,
+            holds_load_error.as_deref(),
+            live_thermal_takeover,
+        );
+        if let Some(err) = &holds_load_error {
+            if !holds_missing {
+                publisher.log(&format!("bridge: could not recover holds: {err}"));
+            }
+        }
+        if holds_recovery_blocked {
+            publisher.log(
+                "bridge: holds state is missing/corrupt while a thermal takeover is live; refusing new thermal writes until release",
+            );
+        }
         if holds.saver_held || holds.input_suspend_held || holds.thermal_held {
             publisher.log("bridge: recovered holds from previous run");
         }
@@ -69,12 +78,12 @@ impl Bridge {
             publisher,
             state: Mutex::new(State {
                 thermal_refresh_pending: holds.thermal_held,
-                thermal_retry_at: None,
-                thermal_failures: 0,
+                thermal_retry: Default::default(),
                 affinity,
                 downscale,
                 display,
                 holds,
+                holds_recovery_blocked,
             }),
             saver_override: AtomicI8::new(-1),
             flags,
@@ -84,9 +93,10 @@ impl Bridge {
         bridge
     }
 
-    /// Atomic write (tmp + rename): a crash mid-write must never corrupt
-    /// the restore points.
-    pub(crate) fn persist(&self, st: &State) {
+    /// Atomic, durable write (tmp + fsync + rename + directory fsync). A crash
+    /// mid-write must never corrupt the restore points. Callers performing a
+    /// write-ahead hold must check the returned error before touching the device.
+    pub(crate) fn persist(&self, st: &State) -> Result<(), String> {
         let file = HoldsFile {
             saver_held: st.holds.saver_held,
             saver_saved: st.holds.saver_saved,
@@ -97,46 +107,104 @@ impl Bridge {
             thermal_profile: st.holds.thermal_profile.clone(),
             thermal_yield: st.holds.thermal_yield,
         };
-        let Ok(s) = serde_json::to_string_pretty(&file) else {
-            return;
-        };
-        use std::io::Write;
-        let tmp = self.holds_path.with_extension("json.tmp");
-        let Ok(mut f) = fs::File::create(&tmp) else {
-            return;
-        };
-        if f.write_all(s.as_bytes()).is_ok() && f.sync_all().is_ok() {
-            let _ = fs::rename(&tmp, &self.holds_path);
+        let result = write_json_atomic(&self.holds_path, &file);
+        if let Err(e) = &result {
+            self.log_event(format!("holds persistence failed: {e}"));
         }
+        result
     }
 
     /// Persists the thread-placement state (`affinity.json`), separately from
     /// `holds.json` because a game can own a dozen per-tid restore points.
-    pub(crate) fn persist_affinity(&self, st: &State) {
-        self.persist_json(&self.affinity_path, &st.affinity);
+    pub(crate) fn persist_affinity(&self, st: &State) -> Result<(), String> {
+        let result = self.persist_json(&self.affinity_path, &st.affinity);
+        if let Err(e) = &result {
+            self.log_event(format!("affinity state persistence failed: {e}"));
+        }
+        result
     }
 
     /// Persists per-app render-scale holds (`downscale.json`).
-    pub(crate) fn persist_downscale(&self, st: &State) {
-        self.persist_json(&self.downscale_path, &st.downscale);
+    pub(crate) fn persist_downscale(&self, st: &State) -> Result<(), String> {
+        let result = self.persist_json(&self.downscale_path, &st.downscale);
+        if let Err(e) = &result {
+            self.log_event(format!("render-scale state persistence failed: {e}"));
+        }
+        result
     }
 
     /// Persists the global display original/preset (`display.json`).
-    pub(crate) fn persist_display(&self, st: &State) {
-        self.persist_json(&self.display_path, &st.display);
+    pub(crate) fn persist_display(&self, st: &State) -> Result<(), String> {
+        let result = self.persist_json(&self.display_path, &st.display);
+        if let Err(e) = &result {
+            self.log_event(format!("display state persistence failed: {e}"));
+        }
+        result
     }
 
-    fn persist_json<T: serde::Serialize>(&self, path: &Path, value: &T) {
-        let Ok(s) = serde_json::to_string_pretty(value) else {
-            return;
-        };
-        use std::io::Write;
-        let tmp = path.with_extension("json.tmp");
-        let Ok(mut f) = fs::File::create(&tmp) else {
-            return;
-        };
-        if f.write_all(s.as_bytes()).is_ok() && f.sync_all().is_ok() {
-            let _ = fs::rename(&tmp, path);
-        }
+    fn persist_json<T: serde::Serialize>(&self, path: &Path, value: &T) -> Result<(), String> {
+        write_json_atomic(path, value)
     }
 }
+
+fn read_holds_file(path: &Path) -> Result<Holds, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let file: HoldsFile =
+        serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(Holds {
+        saver_held: file.saver_held,
+        saver_saved: file.saver_saved,
+        input_suspend_held: file.input_suspend_held,
+        input_suspend_saved: file.input_suspend_saved,
+        thermal_held: file.thermal_held,
+        thermal_saved_sconfig: file.thermal_saved_sconfig,
+        thermal_profile: file.thermal_profile,
+        thermal_yield: file.thermal_yield,
+    })
+}
+
+fn holds_recovery_blocked(missing: bool, load_error: Option<&str>, live_thermal: bool) -> bool {
+    live_thermal && (missing || load_error.is_some())
+}
+
+fn write_json_atomic<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    let text = serde_json::to_string_pretty(value)
+        .map_err(|e| format!("{}: serialize: {e}", path.display()))?;
+    let parent = path.parent().filter(|p| !p.as_os_str().is_empty());
+    if let Some(parent) = parent {
+        fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    let result = (|| {
+        let mut file = fs::File::create(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?;
+        file.write_all(text.as_bytes())
+            .map_err(|e| format!("{}: {e}", tmp.display()))?;
+        file.sync_all()
+            .map_err(|e| format!("{}: fsync: {e}", tmp.display()))?;
+        fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))?;
+        sync_parent(path)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
+}
+
+#[cfg(unix)]
+fn sync_parent(path: &Path) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::File::open(parent)
+        .and_then(|dir| dir.sync_all())
+        .map_err(|e| format!("{}: fsync: {e}", parent.display()))
+}
+
+#[cfg(not(unix))]
+fn sync_parent(_path: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;

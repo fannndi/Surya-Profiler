@@ -16,28 +16,32 @@ pub(super) fn set_sconfig_verified(value: i32) -> Result<(), String> {
     ))
 }
 
+/// Stock value to write during release, or `None` when MIUI's live scenario
+/// must be preserved. Kept pure so every ownership path is regression-tested.
+pub(super) fn release_sconfig_target(live: i32, owned_live: bool, saved: i32) -> Option<i32> {
+    if owned_live || thermal_scenario::is_default(live) {
+        (live != saved).then_some(saved)
+    } else if !thermal_scenario::is_miui_owned(live) {
+        // Android's mi_thermald keeps the last config for unknown IDs;
+        // force vendor normal before deleting our map.
+        Some(0)
+    } else {
+        None
+    }
+}
+
 impl Bridge {
     pub(crate) fn release_thermal_locked(&self, st: &mut State) -> bool {
-        if !st.holds.thermal_held && !marker_path().exists() {
+        let live = read_i32(&sconfig_path()).unwrap_or(0);
+        if !st.holds.thermal_held && !marker_path().exists() && !is_custom_index(live) {
             return false;
         }
-        let live = read_i32(&sconfig_path()).unwrap_or(0);
         let owned_live = is_custom_index(live) || (marker_path().exists() && is_legacy_index(live));
-        let default_live = live == 0 || thermal_scenario::is_default(live);
+        let saved = st.holds.thermal_saved_sconfig.unwrap_or(0);
 
-        if owned_live || default_live {
-            let saved = st.holds.thermal_saved_sconfig.unwrap_or(0);
-            if live != saved {
-                if let Err(e) = set_sconfig_verified(saved) {
-                    self.log_event(format!("thermal: sconfig restore failed: {e}"));
-                    return false;
-                }
-            }
-        } else if !thermal_scenario::has_vendor_map_entry(live) {
-            // Android's mi_thermald keeps the last config for unknown IDs;
-            // force vendor normal before deleting our map.
-            if let Err(e) = set_sconfig_verified(0) {
-                self.log_event(format!("thermal: sconfig stock fallback failed: {e}"));
+        if let Some(target) = release_sconfig_target(live, owned_live, saved) {
+            if let Err(e) = set_sconfig_verified(target) {
+                self.log_event(format!("thermal: sconfig restore failed: {e}"));
                 return false;
             }
         }
@@ -48,8 +52,7 @@ impl Bridge {
             return false;
         }
         st.holds.thermal_held = false;
-        st.thermal_failures = 0;
-        st.thermal_retry_at = None;
+        st.thermal_retry.recovered();
         st.holds.thermal_saved_sconfig = None;
         st.holds.thermal_profile = None;
         st.holds.thermal_yield = None;

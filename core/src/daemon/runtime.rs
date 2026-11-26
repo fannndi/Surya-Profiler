@@ -73,13 +73,13 @@ impl Runtime {
             None
         };
         let sample = PowerSample::from_reading(
-            crate::daemon::power::now_ms(),
+            tick.captured_at_ms,
             tick.reading,
             self.screen_on,
             pkg,
             self.active.clone(),
         );
-        let bucket = self.power.record(&sample, tick.interval_ms);
+        let bucket = self.power.record(&sample, tick.elapsed_ms);
         if self.power_watch {
             self.publisher.emit(&Event::PowerLive {
                 sample: Box::new(sample),

@@ -50,11 +50,10 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
     // re-apply it if the game is still foreground and the switch is on.
     bridge.reconcile_orphan_affinity();
 
-    // R&D input-suspend is app-only and stock 0. If a crash lost holds.json
-    // while the node stayed at 1, release it before the first decision.
-    if !cfg.get().rnd_input_suspend && !bridge.holds_info().input_suspend_held {
-        bridge.reconcile_orphan_input_suspend();
-    }
+    // R&D input-suspend is app-only and stock 0. The helper checks persisted
+    // ownership internally: an unowned live 1 is always an orphan, even when
+    // the user currently wants the R&D switch enabled.
+    bridge.reconcile_orphan_input_suspend();
 
     // Crash recovery when the service was already disabled: `evaluate` will
     // not run, so a leftover saver/input-suspend/thermal hold would otherwise
@@ -85,6 +84,8 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
         work_rx,
     )?;
     threads::spawn_bridge(bridge.clone(), sync_rx)?;
+    let power_screen = Arc::new(AtomicBool::new(true));
+    let power_sampler = power::spawn(msg_tx.clone(), power_screen.clone());
 
     // --- main loop -------------------------------------------------------------
     let mut rt = Runtime {
@@ -103,7 +104,8 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
         stats: Stats::load(state_dir),
         power: power::PowerHistory::load(state_dir),
         power_watch: false,
-        power_screen: Arc::new(AtomicBool::new(true)),
+        power_screen,
+        power_sampler,
         reconciled: false,
         watchdog_tick: 0,
         floor_audit: freq_audit::FloorAudit::new(),
@@ -113,6 +115,10 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
         multi_window: false,
         second_window: None,
         mw_probe: Arc::new(AtomicBool::new(false)),
+        peek_seq: 0,
+        last_seed_seq: 0,
+        foreground_ready: false,
+        last_fg_probe: Instant::now(),
         last_fg: None,
         last_real: None,
         last_fg_at: None,
@@ -129,10 +135,12 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
     if rt.fg_watcher.is_none() {
         rt.log("foreground watcher: failed to spawn logcat");
     }
+    // The live stream deliberately drops pre-spawn history. Seed the current
+    // foreground once so a daemon restart does not fall back to the launcher
+    // while YouTube/a game remains in front.
+    rt.peek_now("startup");
     // read-only telemetry (battery / thermal / GPU busy) for diagnostics
     env::spawn(msg_tx.clone());
-    // fast battery/charger sampling for the Power usage screen + history
-    power::spawn(msg_tx.clone(), rt.power_screen.clone());
     rt.emit_state(true);
 
     let mut next_sup = Instant::now() + Duration::from_millis(SUPERVISE_MS);
@@ -168,7 +176,8 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
                 pkg,
                 trigger,
                 started,
-            }) => rt.on_seed(pkg, trigger, started),
+                seq,
+            }) => rt.on_seed(pkg, trigger, started, seq),
             Ok(Msg::Env(snap)) => rt.on_env(*snap),
             Ok(Msg::Power(tick)) => rt.on_power(tick),
             Ok(Msg::WatcherDown) => {
@@ -241,8 +250,10 @@ pub fn run(state_dir: &Path, config_path: &Path) -> Result<(), String> {
     if let Some(w) = rt.fg_watcher.as_mut() {
         w.stop();
     }
-    // Close the in-progress power bucket before the process exits (a clean
-    // stop loses at most one sample; SIGKILL loses the current minute).
+    // Stop the sampler before the final flush so no tick is lost during the
+    // potentially long worker restore window.
+    rt.power_sampler.stop();
+    // Close the in-progress power bucket before the process exits.
     rt.power.flush();
     // The worker owns every write; it quiesces, restores and reports.
     exit::shutdown_worker(&mut rt, &msg_rx, worker_handle);

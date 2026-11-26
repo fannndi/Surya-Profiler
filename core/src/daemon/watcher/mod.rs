@@ -57,8 +57,15 @@ pub struct Watcher {
 }
 
 impl Watcher {
-    pub fn is_alive(&self) -> bool {
-        self.alive.load(Ordering::Relaxed)
+    pub fn is_alive(&mut self) -> bool {
+        if !self.alive.load(Ordering::Relaxed) {
+            return false;
+        }
+        if matches!(self.child.try_wait(), Ok(Some(_))) {
+            self.alive.store(false, Ordering::Relaxed);
+            return false;
+        }
+        true
     }
 
     pub fn stop(&mut self) {

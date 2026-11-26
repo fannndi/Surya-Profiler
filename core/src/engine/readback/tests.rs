@@ -94,6 +94,16 @@ fn freq_max_accepts_stricter_external_cap() {
 }
 
 #[test]
+fn exact_freq_max_reconcile_preserves_a_stricter_external_cap() {
+    // Forced reconcile must heal a lost/too-high cap without raising a lower
+    // thermal/QoS cap. Exact means "no external-QoS shortcut" for the other
+    // frequency kinds, not "fight a stricter maximum".
+    assert!(readback_matches_exact(Kind::FreqMax, "1555200", "1209600"));
+    assert!(readback_matches_exact(Kind::FreqMax, "1555200", "1555200"));
+    assert!(!readback_matches_exact(Kind::FreqMax, "1555200", "1804800"));
+}
+
+#[test]
 fn freq_min_accepts_external_qos_floor() {
     // perf HAL msm_performance cpu_min_freq QoS holds the effective floor
     // ABOVE the requested value -> framework wins (harmony rule), in-sync,

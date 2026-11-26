@@ -46,20 +46,23 @@ import com.suryaprofiler.protocol.PowerPeaks
 @Composable
 fun PowerScreen(onBack: () -> Unit) {
     val running by DynamicProfileState.running.collectAsStateWithLifecycle()
+    val daemonConnected by DynamicProfileState.daemonConnected.collectAsStateWithLifecycle()
     val snapshot by DynamicProfileState.powerSnapshot.collectAsStateWithLifecycle()
     val live by DynamicProfileState.powerLive.collectAsStateWithLifecycle()
     val liveBuckets by DynamicProfileState.powerLiveBuckets.collectAsStateWithLifecycle()
     var windowS by rememberSaveable { mutableStateOf(86_400L) }
     var confirmClear by remember { mutableStateOf(false) }
 
-    LaunchedEffect(running, windowS) {
-        if (running) DaemonLink.send(DaemonCommands.power(watch = true, windowS = windowS))
+    LaunchedEffect(running, daemonConnected, windowS) {
+        if (running && daemonConnected) {
+            DaemonLink.send(DaemonCommands.power(watch = true, windowS = windowS))
+        }
     }
-    LaunchedEffect(running) {
-        if (!running) DynamicProfileState.resetPower()
+    LaunchedEffect(running, daemonConnected) {
+        if (!running || !daemonConnected) DynamicProfileState.resetPower()
     }
     LifecycleEventEffect(Lifecycle.Event.ON_START) {
-        if (DynamicProfileState.running.value) {
+        if (DynamicProfileState.running.value && DynamicProfileState.daemonConnected.value) {
             DaemonLink.send(DaemonCommands.power(watch = true, windowS = windowS))
         }
     }
@@ -108,7 +111,7 @@ fun PowerScreen(onBack: () -> Unit) {
                 },
                 actions = {
                     IconButton(
-                        enabled = running,
+                        enabled = running && daemonConnected,
                         onClick = {
                             DaemonLink.send(DaemonCommands.power(true, windowS))
                         },
@@ -116,7 +119,7 @@ fun PowerScreen(onBack: () -> Unit) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
                     IconButton(
-                        enabled = running,
+                        enabled = running && daemonConnected,
                         onClick = { confirmClear = true },
                     ) {
                         Icon(Icons.Default.Delete, contentDescription = "Clear power history")
@@ -137,8 +140,18 @@ fun PowerScreen(onBack: () -> Unit) {
                     SectionCard("Service is off") {
                         Text(
                             "Turn on the Service on the Home screen to record charging " +
-                                "and power usage. History is daemon-owned and only exists " +
-                                "while the service runs.",
+                                "and power usage. Sampling pauses while the Service is off; " +
+                                "recorded history and peaks remain in daemon storage for next time.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            } else if (!daemonConnected) {
+                item(key = "disconnected") {
+                    SectionCard("Daemon is disconnected") {
+                        Text(
+                            "Waiting for the daemon to reconnect. Power sampling and " +
+                                "the previous live snapshot are paused.",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }

@@ -79,6 +79,8 @@ const SLEEP_DELAY_MS: u64 = 10_000; // screen off -> sleep grace period
 /// launcher flashes between two registered apps) coalesces into one smooth
 /// profile switch instead of back-to-back full applies.
 const FG_DEBOUNCE_MS: u64 = 300;
+/// A silent logcat stream must not freeze foreground detection forever.
+const FG_PROBE_MS: u64 = 60_000;
 
 /// Messages the main loop consumes.
 enum Msg {
@@ -101,6 +103,7 @@ enum Msg {
         pkg: Option<String>,
         trigger: &'static str,
         started: Instant,
+        seq: u64,
     },
     /// Fresh environment sample (battery / thermal / GPU busy).
     Env(Box<EnvSnapshot>),
@@ -138,6 +141,8 @@ struct Runtime {
     power_watch: bool,
     /// Screen state shared with the power sampler thread (cadence switch).
     power_screen: Arc<AtomicBool>,
+    /// Joinable sampler; stopped before the final history flush on exit.
+    power_sampler: power::PowerSampler,
     /// False until the first apply of this daemon run: the startup decision
     /// is forced so a pack update or drift that happened while we were down
     /// is reconciled.
@@ -156,6 +161,12 @@ struct Runtime {
     second_window: Option<String>,
     /// In-flight `dumpsys window` split probe (never more than one).
     mw_probe: Arc<AtomicBool>,
+    /// Startup/periodic foreground peek request sequence.
+    peek_seq: u64,
+    last_seed_seq: u64,
+    /// False until a live event or startup peek gives us a real foreground.
+    foreground_ready: bool,
+    last_fg_probe: Instant,
     /// Deduped raw foreground.
     last_fg: Option<String>,
     /// Last non-transient package.

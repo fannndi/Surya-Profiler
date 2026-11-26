@@ -32,7 +32,6 @@ import org.json.JSONObject
  * Non-goals: any decision or tuning logic (all in the Rust daemon).
  */
 class DynamicProfileService : Service() {
-
     companion object {
         private const val TAG = "SuryaProfiler"
         private const val SUPERVISE_MS = 3_000L
@@ -73,7 +72,6 @@ class DynamicProfileService : Service() {
     @Volatile private var lastScreen: Boolean? = null
     @Volatile private var lastLocked: Boolean? = null
     private var lastNotified: Pair<String, String>? = null
-
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             Log.d(TAG, "receiver: ${intent.action}")
@@ -139,7 +137,6 @@ class DynamicProfileService : Service() {
         }
         return START_STICKY
     }
-
     override fun onDestroy() {
         // Stop accepting output before the reader gets a chance to deliver a
         // buffered event into the state flows after the service is gone.
@@ -150,6 +147,7 @@ class DynamicProfileService : Service() {
         client = null
         scope.cancel()
         DynamicProfileState.running.value = false
+        DynamicProfileState.setDaemonConnected(false)
         DynamicProfileState.reason.value = null
         DynamicProfileState.appliedProfile.value = null
         DynamicProfileState.diag.value = null // no stale telemetry after stop
@@ -161,7 +159,6 @@ class DynamicProfileService : Service() {
         ServiceTile.refresh(this)
         super.onDestroy()
     }
-
     override fun onBind(intent: Intent?): IBinder? = null
 
     // --- daemon lifecycle ---------------------------------------------------
@@ -177,12 +174,14 @@ class DynamicProfileService : Service() {
             // replacement daemon.
             client?.stopAndWait()
             client = null
+            DynamicProfileState.setDaemonConnected(false)
             val c = DaemonClient(
                 configPath = daemonConfigPath(this),
                 onEvent = { ev -> handleEvent(ev) },
                 onExit = {
                     // restart is the supervisor's job (single restart path)
                     lastClientStart = System.currentTimeMillis()
+                    DynamicProfileState.setDaemonConnected(false)
                     Log.w(TAG, "daemon exited")
                 },
                 onLog = { line -> DynamicProfileState.pushLog(line) },
@@ -200,6 +199,7 @@ class DynamicProfileService : Service() {
             }
             client = c
             DaemonLink.client = c
+            DynamicProfileState.setDaemonConnected(true)
             // seed the diagnostics screen (on-demand, cheap)
             c.send(DaemonCommands.diag())
             c.send(DaemonCommands.stats())

@@ -5,6 +5,7 @@
 //! partial line is skipped on load (never fatal). Old lines are dropped by
 //! rewriting the file atomically at most once per day.
 
+use super::aggregate::merge_buckets;
 use super::model::{PeaksFile, PowerBucket, PowerPeaks, HISTORY_FILE, PEAKS_FILE, PEAKS_SCHEMA};
 use crate::logging::{write, Level};
 use std::collections::VecDeque;
@@ -20,8 +21,8 @@ fn peaks_path(dir: &Path) -> PathBuf {
     dir.join(PEAKS_FILE)
 }
 
-/// Loads and sorts all valid bucket lines. Duplicate `t_ms` keeps the newest
-/// line (an interrupted append can leave the same minute twice).
+/// Loads and sorts all valid bucket lines. Duplicate `t_ms` rows are merged
+/// duration-first so an interrupted same-minute close never loses a segment.
 pub fn load_history(dir: &Path) -> Vec<PowerBucket> {
     let path = history_path(dir);
     let Ok(text) = fs::read_to_string(&path) else {
@@ -43,66 +44,97 @@ pub fn load_history(dir: &Path) -> Vec<PowerBucket> {
         log(&format!("history: skipped {bad} corrupt line(s)"));
     }
     rows.sort_by_key(|b| b.t_ms);
-    let mut out: Vec<PowerBucket> = Vec::with_capacity(rows.len());
+    let raw_rows = rows.len();
+    let mut out: VecDeque<PowerBucket> = VecDeque::with_capacity(rows.len());
     for row in rows {
-        if let Some(last) = out.last_mut() {
+        if let Some(last) = out.back_mut() {
             if last.t_ms == row.t_ms {
-                *last = row;
+                match (&last.segment_id, &row.segment_id) {
+                    // A retried/durable replay of the same segment is not new
+                    // duration. Keep one copy; distinct partials are merged.
+                    (Some(a), Some(b)) if a == b => *last = row,
+                    _ => *last = merge_buckets(last.clone(), row),
+                }
                 continue;
             }
         }
-        out.push(row);
+        out.push_back(row);
     }
-    out
+    // Heal legacy files that still contain multiple rows for one minute.
+    // The in-memory result is already correct; rewrite is best effort.
+    if out.len() != raw_rows {
+        log(&format!(
+            "history: merged {raw_rows} rows into {} unique minutes",
+            out.len()
+        ));
+        let _ = rewrite(dir, &out);
+    }
+    out.into()
 }
 
 /// Appends one closed bucket. Best effort: a failed write is logged and the
 /// daemon keeps running (the in-memory ring still has the data).
-pub fn append(dir: &Path, bucket: &PowerBucket) {
-    let Ok(line) = serde_json::to_string(bucket) else {
-        return;
-    };
+pub fn append(dir: &Path, bucket: &PowerBucket) -> std::io::Result<()> {
+    let line = serde_json::to_string(bucket).map_err(|e| {
+        log(&format!("history encode: {e}"));
+        std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+    })?;
     let path = history_path(dir);
-    match OpenOptions::new().create(true).append(true).open(&path) {
-        Ok(mut f) => {
-            if let Err(e) = writeln!(f, "{line}") {
-                log(&format!("history append: {e}"));
-            }
-        }
-        Err(e) => log(&format!("history open: {e}")),
-    }
+    let result = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .and_then(|mut f| writeln!(f, "{line}"));
+    result.map_err(|e| {
+        log(&format!("history append: {e}"));
+        e
+    })
 }
 
-/// Atomic rewrite (tmp + rename) after retention trimming.
-pub fn rewrite(dir: &Path, buckets: &VecDeque<PowerBucket>) {
+/// Atomic rewrite (tmp + rename) after retention trimming or a same-minute
+/// merge. Serialization/write/rename failures are returned to the caller.
+pub fn rewrite(dir: &Path, buckets: &VecDeque<PowerBucket>) -> std::io::Result<()> {
     let mut body = String::with_capacity(buckets.len() * 180);
     for b in buckets {
-        let Ok(line) = serde_json::to_string(b) else {
-            continue;
-        };
+        let line = serde_json::to_string(b).map_err(|e| {
+            log(&format!("history encode: {e}"));
+            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+        })?;
         body.push_str(&line);
         body.push('\n');
     }
     let path = history_path(dir);
     let tmp = path.with_extension("jsonl.tmp");
-    if let Err(e) = fs::write(&tmp, body) {
+    fs::write(&tmp, body).map_err(|e| {
         log(&format!("history rewrite: {e}"));
-        return;
-    }
-    if let Err(e) = fs::rename(&tmp, &path) {
+        e
+    })?;
+    fs::rename(&tmp, &path).map_err(|e| {
         log(&format!("history rename: {e}"));
-    }
+        e
+    })
 }
 
-/// Removes both history and peaks (user Clear).
-pub fn clear(dir: &Path) {
-    for path in [history_path(dir), peaks_path(dir)] {
+/// Removes history, peaks and both atomic-write temporaries (user Clear).
+/// Success means every path is gone; all paths are attempted even on error.
+pub fn clear(dir: &Path) -> std::io::Result<()> {
+    let mut first_error = None;
+    for path in [
+        history_path(dir),
+        peaks_path(dir),
+        history_path(dir).with_extension("jsonl.tmp"),
+        peaks_path(dir).with_extension("json.tmp"),
+    ] {
         match fs::remove_file(&path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => log(&format!("clear {}: {e}", path.display())),
+            Err(e) => {
+                log(&format!("clear {}: {e}", path.display()));
+                first_error.get_or_insert(e);
+            }
         }
     }
+    first_error.map_or(Ok(()), Err)
 }
 
 /// Loads all-time peaks; corrupt/missing starts empty (never fatal).
@@ -120,27 +152,30 @@ pub fn load_peaks(dir: &Path) -> PowerPeaks {
 }
 
 /// Atomic peaks write; only called when a peak actually changed.
-pub fn save_peaks(dir: &Path, peaks: &PowerPeaks) {
+pub fn save_peaks(dir: &Path, peaks: &PowerPeaks) -> std::io::Result<()> {
     let file = PeaksFile {
         schema: PEAKS_SCHEMA,
         peaks: peaks.clone(),
     };
-    let Ok(body) = serde_json::to_string(&file) else {
-        return;
-    };
+    let body = serde_json::to_string(&file).map_err(|e| {
+        log(&format!("peaks encode: {e}"));
+        std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+    })?;
     let path = peaks_path(dir);
     let tmp = path.with_extension("json.tmp");
-    match fs::File::create(&tmp).and_then(|mut f| {
-        f.write_all(body.as_bytes())?;
-        f.sync_all()
-    }) {
-        Ok(()) => {
-            if let Err(e) = fs::rename(&tmp, &path) {
-                log(&format!("peaks rename: {e}"));
-            }
-        }
-        Err(e) => log(&format!("peaks write: {e}")),
-    }
+    fs::File::create(&tmp)
+        .and_then(|mut f| {
+            f.write_all(body.as_bytes())?;
+            f.sync_all()
+        })
+        .map_err(|e| {
+            log(&format!("peaks write: {e}"));
+            e
+        })?;
+    fs::rename(&tmp, &path).map_err(|e| {
+        log(&format!("peaks rename: {e}"));
+        e
+    })
 }
 
 fn log(msg: &str) {

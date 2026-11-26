@@ -52,6 +52,10 @@ data class PowerBucket(
     val samples: Int,
     val pkg: String?,
     val profile: String?,
+    val startMs: Long? = null,
+    val endMs: Long? = null,
+    val energyMwh: Double? = null,
+    val segmentId: String? = null,
 )
 
 data class PowerPeak(
@@ -79,53 +83,110 @@ data class PowerSnapshot(
     val currentBucket: PowerBucket?,
     val history: List<PowerBucket>,
     val peaks: PowerPeaks,
+    /** False for a malformed/missing snapshot; reducers must ignore it. */
+    val isValid: Boolean = true,
 )
 
 object PowerParse {
     fun snapshot(root: JSONObject): PowerSnapshot {
-        val s = root.optJSONObject("snapshot") ?: JSONObject()
+        val s = root.optJSONObject("snapshot") ?: return invalidSnapshot()
+        val windowS = s.requiredLong("window_s")?.takeIf { it >= 0 } ?: return invalidSnapshot()
+        val history = s.optJSONArray("history") ?: return invalidSnapshot()
         return PowerSnapshot(
-            windowS = s.optLong("window_s", 86_400),
+            windowS = windowS,
             live = s.optJSONObject("live")?.let(::sample),
             currentBucket = s.optJSONObject("current_bucket")?.let(::bucket),
-            history = buckets(s.optJSONArray("history")),
+            history = buckets(history),
             peaks = peaks(s.optJSONObject("peaks")),
         )
     }
 
-    fun sample(o: JSONObject): PowerSample = PowerSample(
-        tMs = o.optLong("t_ms"),
-        pct = o.intOrNull("pct"),
-        status = o.strOrNull("status"),
-        currentUa = o.longOrNull("current_ua"),
-        voltageUv = o.longOrNull("voltage_uv"),
-        tempC = o.floatOrNull("temp_c"),
-        chargeCounterUah = o.longOrNull("charge_counter_uah"),
-        chargeFullMah = o.intOrNull("charge_full_mah"),
-        cycleCount = o.intOrNull("cycle_count"),
-        inputSuspend = o.boolOrNull("input_suspend"),
-        chargeEnabled = o.boolOrNull("charge_enabled"),
-        input = o.optJSONObject("input")?.let(::input),
-        screenOn = o.optBoolean("screen_on"),
-        pkg = o.strOrNull("pkg"),
-        profile = o.strOrNull("profile"),
+    private fun invalidSnapshot() = PowerSnapshot(
+        windowS = 0,
+        live = null,
+        currentBucket = null,
+        history = emptyList(),
+        peaks = PowerPeaks(),
+        isValid = false,
     )
 
-    fun bucket(o: JSONObject): PowerBucket = PowerBucket(
-        tMs = o.optLong("t_ms"),
-        pct = o.intOrNull("pct"),
-        avgUa = o.optLong("avg_ua"),
-        minUa = o.optLong("min_ua"),
-        maxUa = o.optLong("max_ua"),
-        avgUv = o.optLong("avg_uv"),
-        avgTempC = o.floatOrNull("avg_temp_c"),
-        maxTempC = o.floatOrNull("max_temp_c"),
-        screenOn = o.optBoolean("screen_on"),
-        durMs = o.optLong("dur_ms"),
-        samples = o.optInt("samples"),
-        pkg = o.strOrNull("pkg"),
-        profile = o.strOrNull("profile"),
-    )
+    fun sample(o: JSONObject): PowerSample? {
+        val tMs = o.requiredLong("t_ms")?.takeIf { it >= 0 } ?: return null
+        val screenOn = o.requiredBoolean("screen_on") ?: return null
+        return PowerSample(
+            tMs = tMs,
+            pct = o.intOrNull("pct"),
+            status = o.strOrNull("status"),
+            currentUa = o.longOrNull("current_ua"),
+            voltageUv = o.longOrNull("voltage_uv"),
+            tempC = o.floatOrNull("temp_c"),
+            chargeCounterUah = o.longOrNull("charge_counter_uah"),
+            chargeFullMah = o.intOrNull("charge_full_mah"),
+            cycleCount = o.intOrNull("cycle_count"),
+            inputSuspend = o.boolOrNull("input_suspend"),
+            chargeEnabled = o.boolOrNull("charge_enabled"),
+            input = o.optJSONObject("input")?.let(::input),
+            screenOn = screenOn,
+            pkg = o.strOrNull("pkg"),
+            profile = o.strOrNull("profile"),
+        )
+    }
+
+    fun bucket(o: JSONObject): PowerBucket? {
+        val tMs = o.requiredLong("t_ms")?.takeIf { it >= 0 } ?: return null
+        val avgUa = o.requiredLong("avg_ua") ?: return null
+        val minUa = o.requiredLong("min_ua") ?: return null
+        val maxUa = o.requiredLong("max_ua") ?: return null
+        val avgUv = o.requiredLong("avg_uv")?.takeIf { it > 0 } ?: return null
+        val screenOn = o.requiredBoolean("screen_on") ?: return null
+        val durMs = o.requiredLong("dur_ms")?.takeIf { it >= 0 } ?: return null
+        val samples = o.requiredLong("samples")
+            ?.takeIf { it in 0..Int.MAX_VALUE.toLong() }
+            ?.toInt()
+            ?: return null
+        if (minUa > maxUa || avgUa !in minUa..maxUa) return null
+        val startMs = o.optionalLong("start_ms")
+        val endMs = o.optionalLong("end_ms")
+        if (startMs != null && endMs != null && startMs > endMs) return null
+        return PowerBucket(
+            tMs = tMs,
+            pct = o.intOrNull("pct"),
+            avgUa = avgUa,
+            minUa = minUa,
+            maxUa = maxUa,
+            avgUv = avgUv,
+            avgTempC = o.floatOrNull("avg_temp_c"),
+            maxTempC = o.floatOrNull("max_temp_c"),
+            screenOn = screenOn,
+            durMs = durMs,
+            samples = samples,
+            pkg = o.strOrNull("pkg"),
+            profile = o.strOrNull("profile"),
+            startMs = startMs,
+            endMs = endMs,
+            energyMwh = o.optionalDouble("energy_mwh"),
+            segmentId = o.strOrNull("segment_id"),
+        )
+    }
+
+    private fun JSONObject.requiredLong(key: String): Long? {
+        val value = opt(key) as? Number ?: return null
+        return if (value.toDouble().isFinite()) value.toLong() else null
+    }
+
+    private fun JSONObject.requiredBoolean(key: String): Boolean? = opt(key) as? Boolean
+
+    private fun JSONObject.optionalLong(key: String): Long? {
+        if (!has(key) || isNull(key)) return null
+        val value = opt(key) as? Number ?: return null
+        return if (value.toDouble().isFinite()) value.toLong() else null
+    }
+
+    private fun JSONObject.optionalDouble(key: String): Double? {
+        if (!has(key) || isNull(key)) return null
+        val value = opt(key) as? Number ?: return null
+        return value.toDouble().takeIf { it.isFinite() }
+    }
 
     private fun input(o: JSONObject): PowerInput = PowerInput(
         name = o.optString("name", "input"),

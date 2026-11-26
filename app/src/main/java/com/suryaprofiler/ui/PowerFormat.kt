@@ -42,6 +42,17 @@ internal fun formatPower(mw: Double?): String {
     }
 }
 
+/** Aggregate rows must expose the battery-side sign, not just magnitude. */
+internal fun formatPowerWithDirection(mw: Double?): String {
+    val direction = when {
+        mw == null -> return "—"
+        mw < 0 -> "Charge"
+        mw > 0 -> "Usage"
+        else -> "Idle"
+    }
+    return "$direction ${formatPower(mw)}"
+}
+
 internal fun formatVoltage(uv: Long?): String =
     uv?.let { String.format(Locale.US, "%.2f V", it / 1_000_000.0) } ?: "—"
 

@@ -54,6 +54,9 @@ object DynamicProfileState {
     /** True while [DynamicProfileService] is alive. */
     val running = MutableStateFlow(false)
 
+    /** True only after the current daemon completes its hello handshake. */
+    val daemonConnected = MutableStateFlow(false)
+
     /**
      * Display text of the current decision:
      * "base" | "screen off" | "multi-window" | app label | "MIUI saver".
@@ -91,18 +94,32 @@ object DynamicProfileState {
      * partial bucket (completed history is already in the snapshot).
      */
     fun onPowerSnapshot(snap: PowerSnapshot) {
+        if (!snap.isValid) return
         powerSnapshot.value = snap
         powerLive.value = snap.live
         powerLiveBuckets.value = listOfNotNull(snap.currentBucket)
     }
 
-    /** Merges one live bucket by `tMs`; bounded to two days of minutes. */
+    /** Service/daemon lifecycle hook; a disconnect invalidates live power data. */
+    fun setDaemonConnected(connected: Boolean) {
+        daemonConnected.value = connected
+        if (!connected) resetPower()
+    }
+
+    /** Merges one live bucket by segment (or minute for legacy rows). */
     fun onPowerLive(sample: PowerSample, bucket: PowerBucket?) {
         powerLive.value = sample
         if (bucket == null) return
         val list = powerLiveBuckets.value
-        val i = list.indexOfLast { it.tMs == bucket.tMs }
+        val i = list.indexOfLast { previous ->
+            when {
+                previous.segmentId != null && bucket.segmentId != null ->
+                    previous.segmentId == bucket.segmentId
+                else -> previous.segmentId == null && bucket.segmentId == null && previous.tMs == bucket.tMs
+            }
+        }
         powerLiveBuckets.value = if (i >= 0) {
+            // Live rows are cumulative for one segment: replace, never add durations.
             list.toMutableList().also { it[i] = bucket }
         } else {
             (list + bucket).takeLast(2880)

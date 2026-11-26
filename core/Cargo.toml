@@ -18,6 +18,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 aes = "0.8"
 cbc = { version = "0.1", features = ["alloc"] }
+fs2 = "0.4"
 
 [dev-dependencies]
 sha2 = "0.10"

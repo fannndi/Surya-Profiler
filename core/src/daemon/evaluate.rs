@@ -10,7 +10,7 @@ use super::bridge::SyncCtx;
 use super::watcher;
 use super::worker::{self, Work};
 use super::{Runtime, PERIODIC_TICKS};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Neutral package used once at startup when the event buffer gives us no
 /// real foreground: applying the base beats applying nothing.
@@ -37,6 +37,12 @@ impl Runtime {
         let cfg = self.config.get().clone();
         if !cfg.enabled {
             // the app owns lifecycle: it stops the service (and thus us)
+            return;
+        }
+        // Screen-on decisions need a real foreground. The startup peek or a
+        // live event supplies it; until then applying the launcher fallback
+        // could drop a mapped game/video profile after daemon restart.
+        if self.screen_on && !self.locked && !self.foreground_ready {
             return;
         }
         let mut fg = fg_override.or_else(|| self.last_fg.clone());
@@ -154,6 +160,15 @@ impl Runtime {
         if self.screen_on && !self.locked && ticks.is_multiple_of(5) {
             self.peek_mw_now();
         }
+        // A hung-but-alive logcat stream cannot be detected by EOF alone.
+        // A cheap periodic peek keeps foreground changes flowing and also
+        // repairs a cleared MIUI event buffer.
+        if self.screen_on
+            && !self.locked
+            && self.last_fg_probe.elapsed() >= Duration::from_millis(super::FG_PROBE_MS)
+        {
+            self.peek_now("periodic");
+        }
         if ticks.is_multiple_of(PERIODIC_TICKS) && self.screen_on && !self.locked {
             self.evaluate("periodic", None);
         }
@@ -177,7 +192,7 @@ impl Runtime {
         // foreground stream health
         let fg_alive = self
             .fg_watcher
-            .as_ref()
+            .as_mut()
             .map(|w| w.is_alive())
             .unwrap_or(false);
         if !fg_alive && self.last_watcher_restart.elapsed() >= watcher::RESTART_BACKOFF {

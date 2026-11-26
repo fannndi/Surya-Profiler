@@ -62,6 +62,54 @@ fn custom_indices_do_not_overlap_miui_scenarios() {
 }
 
 #[test]
+fn miui_offset_scenarios_survive_every_thermal_ownership_path() {
+    for live in [112, 108, 117, 118] {
+        assert_eq!(
+            super::release::release_sconfig_target(live, false, 0),
+            None,
+            "release must preserve MIUI {live}"
+        );
+        assert_eq!(
+            super::orphan_cleanup_sconfig_target(live, false),
+            None,
+            "orphan cleanup must preserve MIUI {live}"
+        );
+        assert_eq!(
+            super::perf::perf_stock_target(Some(live), false),
+            None,
+            "performance release must preserve MIUI {live}"
+        );
+        assert_eq!(
+            super::initial_saved_sconfig(Some(live), false),
+            live,
+            "initial capture must save MIUI {live}"
+        );
+    }
+}
+
+#[test]
+fn unknown_thermal_values_keep_the_conservative_stock_fallback() {
+    assert_eq!(
+        super::release::release_sconfig_target(999, false, 0),
+        Some(0)
+    );
+    assert_eq!(super::orphan_cleanup_sconfig_target(999, false), Some(0));
+    assert_eq!(super::perf::perf_stock_target(Some(999), false), Some(1));
+    assert_eq!(super::initial_saved_sconfig(Some(999), false), 0);
+}
+
+#[test]
+fn legacy_index_collisions_are_miui_owned_without_takeover_evidence() {
+    for live in 20..=23 {
+        assert_eq!(super::perf::perf_stock_target(Some(live), false), None);
+        assert_eq!(super::initial_saved_sconfig(Some(live), false), live);
+        assert_eq!(super::release::release_sconfig_target(live, false, 0), None);
+    }
+    assert_eq!(super::perf::perf_stock_target(Some(70), false), Some(1));
+    assert_eq!(super::perf::perf_stock_target(Some(70), true), Some(1));
+}
+
+#[test]
 fn repairs_a_config_path_that_is_a_file() {
     let root = tmp("config-file");
     let config = root.join("data/vendor/thermal/config");

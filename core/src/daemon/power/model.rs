@@ -94,6 +94,16 @@ pub struct PowerBucket {
     pub pkg: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
+    /// Optional segment bounds/energy for newer rows; legacy rows omit them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub energy_mwh: Option<f64>,
+    /// Identifies one in-progress segment across cumulative live updates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segment_id: Option<String>,
 }
 
 /// All-time peak (until the user clears history). `ua` keeps the device sign:
@@ -163,7 +173,14 @@ pub struct PowerSnapshot {
 #[derive(Debug, Clone)]
 pub struct PowerTick {
     pub reading: PowerReading,
+    /// Nominal cadence that produced this tick (retained for diagnostics).
+    #[allow(dead_code)]
     pub interval_ms: u64,
+    /// Wall-clock capture time used as the sample timestamp.
+    pub captured_at_ms: u64,
+    /// Actual time since the previous capture. The first tick measures from
+    /// sampler startup (rounded up to 1 ms so the reading is not discarded).
+    pub elapsed_ms: u64,
 }
 
 /// Read-only probe path helper (kept here so tests use the same root rule).

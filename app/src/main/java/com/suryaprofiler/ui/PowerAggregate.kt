@@ -17,17 +17,7 @@ internal fun bucketMw(b: PowerBucket): Double? {
     return b.avgUa.toDouble() * b.avgUv.toDouble() / 1_000_000_000.0
 }
 
-/** History + live buckets, keyed by minute (live wins), oldest first. */
-internal fun mergeBuckets(
-    history: List<PowerBucket>,
-    live: List<PowerBucket>,
-): List<PowerBucket> {
-    val map = LinkedHashMap<Long, PowerBucket>()
-    history.forEach { map[it.tMs] = it }
-    live.forEach { map[it.tMs] = it }
-    return map.values.sortedBy { it.tMs }
-}
-
+/** History + live buckets, merged by minute for legacy rows or by segment. */
 internal fun powerPoints(
     history: List<PowerBucket>,
     live: List<PowerBucket>,
@@ -158,7 +148,7 @@ private class SessionAcc {
             startMs = b.tMs
             startPct = b.pct
         }
-        endMs = b.tMs + dur
+        endMs = b.endMs ?: (b.tMs + dur)
         durMs += dur
         b.pct?.let { endPct = it }
         addedMah += (-b.avgUa / 1000.0) * (dur / 3_600_000.0)

@@ -46,6 +46,10 @@ class PowerParseTest {
         assertEquals(12, snap.history[0].samples)
         assertEquals("com.foo", snap.history[0].pkg)
         assertEquals(78, snap.currentBucket?.pct)
+        assertNull(snap.history[0].startMs)
+        assertNull(snap.history[0].endMs)
+        assertNull(snap.history[0].energyMwh)
+        assertNull(snap.history[0].segmentId)
         assertEquals(-2_000_000L, snap.peaks.charge?.ua)
         assertEquals(800_000L, snap.peaks.discharge?.ua)
         assertEquals(38.5f, snap.peaks.temp?.c)
@@ -66,6 +70,45 @@ class PowerParseTest {
     @Test fun liveWithoutSampleIsUnknown() {
         val ev = DaemonEvent.parse(JSONObject("""{"event":"power_live","bucket":$bucketJson}"""))
         assertTrue(ev is DaemonEvent.Unknown)
+    }
+
+    @Test fun parsesOptionalBucketSegmentFields() {
+        val json = JSONObject(bucketJson)
+            .put("start_ms", 1_699_999_999_000)
+            .put("end_ms", 1_700_000_005_000)
+            .put("energy_mwh", -66.5)
+            .put("segment_id", "power-1-2")
+        val b = PowerParse.bucket(json)!!
+        assertEquals(1_699_999_999_000L, b.startMs)
+        assertEquals(1_700_000_005_000L, b.endMs)
+        assertEquals(-66.5, b.energyMwh!!, 0.000_001)
+        assertEquals("power-1-2", b.segmentId)
+    }
+
+    @Test fun malformedBucketIsRejectedInsteadOfBecomingZeros() {
+        val missing = JSONObject(bucketJson).apply { remove("avg_ua") }
+        assertNull(PowerParse.bucket(missing))
+        val wrongType = JSONObject(bucketJson).put("dur_ms", "60000")
+        assertNull(PowerParse.bucket(wrongType))
+        val negative = JSONObject(bucketJson).put("samples", -1)
+        assertNull(PowerParse.bucket(negative))
+    }
+
+    @Test fun malformedLiveSampleIsUnknownAndMalformedBucketIsOptional() {
+        val missingSampleTime = JSONObject("""{"event":"power_live","sample":{"screen_on":true},"bucket":$bucketJson}""")
+        assertTrue(DaemonEvent.parse(missingSampleTime) is DaemonEvent.Unknown)
+        val missingBucketCurrent = JSONObject(bucketJson).apply { remove("avg_ua") }
+        val ev = DaemonEvent.parse(
+            JSONObject("""{"event":"power_live","sample":{"t_ms":10,"screen_on":true}}""")
+                .put("bucket", missingBucketCurrent),
+        ) as DaemonEvent.PowerLive
+        assertNull(ev.bucket)
+    }
+
+    @Test fun missingSnapshotIsInvalidRatherThanAnEmptyZeroSnapshot() {
+        val snap = PowerParse.snapshot(JSONObject("""{"event":"power"}"""))
+        assertFalse(snap.isValid)
+        assertTrue(snap.history.isEmpty())
     }
 
     @Test fun clearReplyIsAnEmptySnapshot() {

@@ -288,6 +288,10 @@ usage on device: live 797 mA/3.51 W matched `current_now=-798645 µA` /
 (`input_suspend=1` → discharging, restored 0), 1-minute history/peaks,
 screen-off Sleep bucket, per-app/profile rows, Clear, history across Service
 OFF/ON, and the 19/19 stock restore with the Power CTA while off.
+Phase 0 (same date) verified startup foreground recovery, stale-peek
+rejection, the OS single-writer lock, legacy history healing (70 rows → 67
+minutes), Power reconnect after SIGKILL, crash-hold recovery, camera yield,
+and preservation of MIUI `sconfig=12` through a 19/19 Service OFF restore.
 Evidence: `docs/HISTORY.md`.
 
 ## Known open items
@@ -299,6 +303,9 @@ Evidence: `docs/HISTORY.md`.
 - Power history starts at v0.11.0, one-minute buckets with a 7-day ring; the
   current sign is device-specific (negative = charging) and must be
   re-audited on a different fuel gauge.
+- Live injection of an orphan `input_suspend=1` was denied by SELinux during
+  Phase 0; host tests cover write-ahead/orphan recovery, but the device path
+  still needs a policy/permit that allows the injection.
 - Multi-window uses a `dumpsys window` probe; re-check after MIUI updates
   (task-line shape may change).
 - The `FolkPatch/APatch` superuser must grant the app once; before that the

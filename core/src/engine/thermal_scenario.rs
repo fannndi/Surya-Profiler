@@ -222,5 +222,16 @@ pub fn has_vendor_map_entry(raw: i32) -> bool {
     )
 }
 
+/// True when a raw `sconfig` value belongs to MIUI, including decoded base +
+/// offset combinations that have no literal vendor-map entry (for example
+/// camera+foreground 112, phone+foreground 108, and 4K/8K camera 117/118).
+///
+/// Unknown, truly-unclassified values deliberately remain unowned so callers
+/// can keep their conservative stock fallback. Private indices are unknown to
+/// the decoder and therefore never MIUI-owned.
+pub fn is_miui_owned(raw: i32) -> bool {
+    has_vendor_map_entry(raw) || decode(raw).known
+}
+
 #[cfg(test)]
 mod tests;

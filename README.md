@@ -13,16 +13,19 @@ assumption re-audited on:
 
 ## Status
 
-- Rust engine + daemon: **222 unit tests + 20 daemon E2E pass**, clippy/fmt clean.
-- Android app: **40 JVM tests**, builds (`app-debug.apk`) and is device-tested.
+- Rust engine + daemon: **264 unit tests + 21 daemon E2E pass**, clippy/fmt clean.
+- Android app: **54 JVM tests**, builds (`app-debug.apk`) and is device-tested.
 - Device E2E: **passed 2026-11-26** for v0.11.0 (Power usage: live
   797 mA/3.51 W at 85% vs kernel `-798645 µA`/`4403272 µV`, USB_CDP input
   via uevent, bypass warning, screen-off Sleep bucket, per-app/profile rows,
-  Clear, history across Service OFF/ON, 19/19 stock restore), and 2026-11-24
-  for v0.10.0 (per-app 0.8 render scale with `mCompatFrame=864×1920`,
-  display `hd` 720p/320 with exact density-400 restore, combined 576×1280,
-  force-stop exit restore), v0.9.0 (thread placement, thermal repair, UFS
-  health) and the earlier suites. Evidence: [docs/HISTORY.md](docs/HISTORY.md).
+  Clear, history across Service OFF/ON, 19/19 stock restore; Phase 0:
+  startup peek, legacy history healing, Power reconnect after SIGKILL,
+  crash-hold recovery, camera yield and MIUI `sconfig=12` preserved through
+  Service OFF), and 2026-11-24 for v0.10.0 (per-app 0.8 render scale with
+  `mCompatFrame=864×1920`, display `hd` 720p/320 with exact density-400
+  restore, combined 576×1280, force-stop exit restore), v0.9.0 (thread
+  placement, thermal repair, UFS health) and the earlier suites. Evidence:
+  [docs/HISTORY.md](docs/HISTORY.md).
 
 ## Features
 

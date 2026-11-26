@@ -78,20 +78,20 @@ fn screen_off_applies_sleep() {
 }
 
 #[test]
-fn keyguard_locked_is_none() {
+fn keyguard_locked_returns_to_base() {
     assert_eq!(
         d(&input(
             true,
             true,
             true,
-            Some("com.example.app"),
-            &[],
+            Some("com.example.game"),
+            &[("com.example.game", "game")],
             "balance",
             false,
             false,
             true
         )),
-        Decision::None
+        applied("balance", "locked")
     );
 }
 
